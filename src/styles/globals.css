@@ -1,0 +1,50 @@
+/* Questionnaire placeholder styling */
+input::placeholder,
+textarea::placeholder {
+  font-weight: 600;
+  color: rgba(10, 14, 26, 0.3);
+}
+
+/* Responsive overrides for EU AI Act Compliance Tool landing page */
+
+@media (max-width: 960px) {
+  .coverage-row {
+    grid-template-columns: 80px 1fr !important;
+  }
+  .coverage-desc {
+    display: none !important;
+  }
+  .steps-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 48px 0 !important;
+  }
+  .steps-grid > div {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(10,14,26,0.1);
+    padding-bottom: 40px;
+  }
+}
+
+@media (max-width: 640px) {
+  .steps-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .article-bar {
+    gap: 24px !important;
+  }
+}
+
+/* Hide scrollbar by default */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+html:hover::-webkit-scrollbar-thumb {
+  background: rgba(10,14,26,0.15);
+}
