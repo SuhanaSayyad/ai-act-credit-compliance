@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+neo4j
+python-dotenv
+shap
+xgboost
+scikit-learn
+pandas
+numpy
+aif360
+requests
