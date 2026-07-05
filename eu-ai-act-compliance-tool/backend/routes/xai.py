@@ -1,10 +1,20 @@
+"""
+XAI Module - Article 13 EU AI Act
+Explainability report using SHAP or model-specific feature importance.
+Supports BYOM (Bring Your Own Model) connector: if model_api_endpoint is
+provided in the questionnaire, real predictions from the external model
+are used. Otherwise falls back to German Credit reference dataset.
+"""
+
 from fastapi import APIRouter
 from models import CreditScoringSystem
 import pandas as pd
 import numpy as np
 import os
+import requests
 
 router = APIRouter()
+
 
 def load_german_credit():
     data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'german_credit.csv')
@@ -58,12 +68,28 @@ def load_german_credit():
     return X, y
 
 
+def call_external_model(endpoint: str, X_sample: pd.DataFrame):
+    """
+    Calls an external model API following the BYOM standardised payload schema.
+    Returns predictions and probabilities, or None if the call fails.
+    """
+    try:
+        payload = {"applicants": X_sample.to_dict(orient='records')}
+        response = requests.post(endpoint, json=payload, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            predictions = data.get("predictions", [])
+            probabilities = data.get("probabilities", [])
+            return np.array(predictions), np.array(probabilities)
+        return None, None
+    except Exception:
+        return None, None
+
+
 def get_model_and_importances(model_type, X_train, X_test, y_train):
     """
-    Select and train the model based on the user's declared model_type.
-    Returns (model, importances_array, method_used_string).
-    Different model types produce genuinely different feature rankings,
-    making the XAI output adaptive to the questionnaire input.
+    Select and train model based on user declared model_type.
+    Different model types produce genuinely different feature rankings.
     """
     mt = (model_type or "").lower()
 
@@ -76,7 +102,7 @@ def get_model_and_importances(model_type, X_train, X_test, y_train):
         model = LogisticRegression(random_state=42, max_iter=1000)
         model.fit(X_tr, y_train)
         importances = np.abs(model.coef_[0])
-        method_used = "Logistic Regression Coefficients (model-specific feature weights)"
+        method_used = "Logistic Regression Coefficients"
         return model, X_te, importances, method_used
 
     elif "neural" in mt or "mlp" in mt or "deep" in mt:
@@ -90,7 +116,7 @@ def get_model_and_importances(model_type, X_train, X_test, y_train):
         model.fit(X_tr, y_train)
         result = permutation_importance(model, X_te, None, n_repeats=5, random_state=42)
         importances = np.abs(result.importances_mean)
-        method_used = "Permutation Importance on MLP Neural Network (SHAP not applicable to neural networks without extensions)"
+        method_used = "Permutation Importance on MLP Neural Network"
         return model, X_te, importances, method_used
 
     elif "random forest" in mt or "forest" in mt:
@@ -127,7 +153,6 @@ def get_model_and_importances(model_type, X_train, X_test, y_train):
         return model, X_test, importances, method_used
 
     else:
-        # Default: Gradient Boosted Trees (GBM)
         from sklearn.ensemble import GradientBoostingClassifier
         model = GradientBoostingClassifier(n_estimators=100, random_state=42)
         model.fit(X_train, y_train)
@@ -175,18 +200,47 @@ async def assess_xai(system: CreditScoringSystem):
         X, y = load_german_credit()
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        model, X_test_used, importances, method_used = get_model_and_importances(
-            system.model_type, X_train, X_test, y_train
-        )
+        byom_used = False
+        byom_note = None
+
+        # BYOM connector: use external model predictions if endpoint provided
+        if system.model_api_endpoint:
+            ext_preds, ext_probs = call_external_model(system.model_api_endpoint, X_test.iloc[:100])
+            if ext_preds is not None and len(ext_preds) > 0:
+                # Use permutation importance on external predictions
+                from sklearn.inspection import permutation_importance
+                from sklearn.linear_model import LogisticRegression
+                from sklearn.preprocessing import StandardScaler
+
+                scaler = StandardScaler()
+                X_te_scaled = scaler.fit_transform(X_test.iloc[:100])
+
+                # Fit a surrogate on external predictions to get feature importances
+                surrogate = LogisticRegression(random_state=42, max_iter=1000)
+                surrogate.fit(X_te_scaled, ext_preds)
+                importances = np.abs(surrogate.coef_[0])
+                method_used = f"Surrogate Model Feature Importance on External Model Predictions (BYOM endpoint: {system.model_api_endpoint})"
+                X_test_used = X_test.iloc[:100]
+                byom_used = True
+                byom_note = f"Predictions sourced from external model at {system.model_api_endpoint}. Feature importances computed via surrogate logistic regression fitted to real model outputs."
+            else:
+                # Endpoint failed, fall back
+                _, X_test_used, importances, method_used = get_model_and_importances(
+                    system.model_type, X_train, X_test, y_train
+                )
+                byom_note = f"External endpoint {system.model_api_endpoint} was unreachable. Fell back to reference dataset analysis."
+        else:
+            _, X_test_used, importances, method_used = get_model_and_importances(
+                system.model_type, X_train, X_test, y_train
+            )
 
         fi_df = pd.DataFrame({
             'feature': X.columns.tolist(),
             'importance': importances
         }).sort_values('importance', ascending=False)
 
-        top_features = fi_df.head(10)
         top_features_list = []
-        for _, row in top_features.iterrows():
+        for _, row in fi_df.head(10).iterrows():
             fname = row['feature']
             imp = float(row['importance'])
             top_features_list.append({
@@ -197,34 +251,26 @@ async def assess_xai(system: CreditScoringSystem):
             })
 
         compliant = system.explainability_method is not None and system.explainability_method != ""
-
-        # Explainability method framing adapts to what the user declared
         declared_method = system.explainability_method or "Not implemented"
-        xai_note = (
-            f"This assessment used {method_used} to reflect the declared model type "
-            f"({system.model_type or 'Gradient Boosted Trees (default)'}). "
-            f"Different model architectures produce different feature rankings."
-        )
 
         recommendations = [
-            f"Provide {declared_method if compliant else 'SHAP'}-based explanations to affected individuals at point of decision",
+            f"Provide {'SHAP' if not compliant else declared_method}-based explanations to affected individuals at point of decision",
             "Ensure explanations are written in plain language accessible to non-technical users",
             "Log all explanations provided for audit purposes under Article 12",
             f"Top driver of decisions is '{top_features_list[0]['feature']}' - review this feature for potential proxy discrimination",
             "Implement an Article 13 compliant explanation interface before deployment"
         ]
-
         if not compliant:
             recommendations.insert(0, "URGENT: Implement an explainability method (SHAP or LIME) before deployment to satisfy Article 13")
 
-        return {
+        result = {
             "system_name": system.system_name,
             "article": "Article 13 - EU AI Act",
             "assessment_type": "Explainability Report",
             "method_used": method_used,
             "model_type_declared": system.model_type or "Not specified (defaulted to Gradient Boosted Trees)",
             "dataset": "German Credit (Statlog) - 1000 records",
-            "xai_note": xai_note,
+            "byom_connector_used": byom_used,
             "top_features": top_features_list,
             "compliance_status": {
                 "status": "COMPLIANT" if compliant else "NON-COMPLIANT",
@@ -233,6 +279,11 @@ async def assess_xai(system: CreditScoringSystem):
             },
             "recommendations": recommendations
         }
+
+        if byom_note:
+            result["byom_note"] = byom_note
+
+        return result
 
     except Exception as e:
         return {

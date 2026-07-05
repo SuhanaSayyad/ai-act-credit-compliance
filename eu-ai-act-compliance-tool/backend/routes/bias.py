@@ -1,10 +1,19 @@
+"""
+Bias Detection Module - Article 10(5) EU AI Act
+IBM AIF360 fairness metrics with adaptive thresholds based on system profile.
+Supports BYOM connector: if model_api_endpoint is provided, real predictions
+from the external model are used for fairness computation.
+"""
+
 from fastapi import APIRouter
 from models import CreditScoringSystem
 import pandas as pd
 import numpy as np
 import os
+import requests
 
 router = APIRouter()
+
 
 def load_german_credit():
     data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'german_credit.csv')
@@ -58,33 +67,43 @@ def load_german_credit():
     return X, y
 
 
+def call_external_model(endpoint: str, X_sample: pd.DataFrame):
+    """Calls external model API for real predictions."""
+    try:
+        payload = {"applicants": X_sample.to_dict(orient='records')}
+        response = requests.post(endpoint, json=payload, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            predictions = data.get("predictions", [])
+            return np.array(predictions)
+        return None
+    except Exception:
+        return None
+
+
 def get_adaptive_thresholds(system: CreditScoringSystem):
     """
-    Returns thresholds that adapt based on the system's context.
+    Returns thresholds that adapt based on system context.
     Known bias issues, special category data, and deployment sector
-    all tighten the acceptable thresholds, producing genuinely different
-    bias assessments for different system profiles.
+    all tighten acceptable thresholds, producing different assessments
+    for different system profiles.
     """
-    # Start with EU standard thresholds (80% rule)
     spd_threshold = 0.05
     di_lower = 0.80
     di_upper = 1.25
     eod_threshold = 0.05
 
-    # If the system has known bias issues, apply stricter thresholds
     if system.known_bias_issues:
         spd_threshold = 0.02
         di_lower = 0.90
         di_upper = 1.10
         eod_threshold = 0.02
 
-    # If special category data is processed, EBA financial sector tighter thresholds apply
     if system.uses_special_category_data:
         spd_threshold = min(spd_threshold, 0.03)
         di_lower = max(di_lower, 0.85)
         eod_threshold = min(eod_threshold, 0.03)
 
-    # Banking sector has stricter requirements under EBA guidelines
     sector = (system.deployment_sector or "").lower()
     if "bank" in sector or "financial" in sector or "credit" in sector:
         spd_threshold = min(spd_threshold, 0.04)
@@ -98,7 +117,7 @@ def get_adaptive_thresholds(system: CreditScoringSystem):
         "rationale": (
             f"Thresholds adjusted for: "
             f"{'known bias issues, ' if system.known_bias_issues else ''}"
-            f"{'special category data processing, ' if system.uses_special_category_data else ''}"
+            f"{'special category data, ' if system.uses_special_category_data else ''}"
             f"sector: {system.deployment_sector or 'General'}"
         )
     }
@@ -106,11 +125,7 @@ def get_adaptive_thresholds(system: CreditScoringSystem):
 
 def compute_aif360_metrics(X, y, y_pred, protected_col, privileged_val,
                             group_a_name, group_b_name, thresholds):
-    """
-    Compute AIF360 fairness metrics with adaptive thresholds.
-    Thresholds vary based on the system's questionnaire inputs,
-    making the bias assessment genuinely different across system profiles.
-    """
+    """Compute AIF360 fairness metrics with adaptive thresholds."""
     try:
         from aif360.metrics import BinaryLabelDatasetMetric, ClassificationMetric
         from aif360.datasets import BinaryLabelDataset
@@ -167,7 +182,6 @@ def compute_aif360_metrics(X, y, y_pred, protected_col, privileged_val,
         aod = float(class_metric.average_odds_difference())
         di_pred = float(class_metric.disparate_impact())
 
-        # Adaptive level functions using context-specific thresholds
         def level_spd(v):
             if abs(v) > spd_thresh * 2: return "HIGH"
             if abs(v) > spd_thresh: return "MEDIUM"
@@ -192,32 +206,32 @@ def compute_aif360_metrics(X, y, y_pred, protected_col, privileged_val,
             "statistical_parity_difference": {
                 "value": round(spd, 4),
                 "bias_level": level_spd(spd),
-                "description": "Difference in positive outcome rates between privileged and unprivileged groups",
-                "threshold": f"Less than {spd_thresh} considered acceptable (adjusted for this system profile)"
+                "description": "Difference in positive outcome rates between groups",
+                "threshold": f"Less than {spd_thresh} acceptable (adjusted for this system)"
             },
             "disparate_impact_ratio": {
                 "value": round(di, 4),
                 "status": di_status(di),
                 "description": "Ratio of positive outcome rates between unprivileged and privileged groups",
-                "threshold": f"{di_lower} to {di_upper} considered acceptable (adjusted for this system profile)"
+                "threshold": f"{di_lower} to {di_upper} acceptable (adjusted for this system)"
             },
             "equal_opportunity_difference": {
                 "value": round(eod, 4),
                 "bias_level": level_eod(eod),
-                "description": "Difference in true positive rates between unprivileged and privileged groups",
-                "threshold": f"Less than {eod_thresh} considered acceptable (adjusted for this system profile)"
+                "description": "Difference in true positive rates between groups",
+                "threshold": f"Less than {eod_thresh} acceptable (adjusted for this system)"
             },
             "average_odds_difference": {
                 "value": round(aod, 4),
                 "bias_level": level_eod(aod),
                 "description": "Average of difference in false positive and true positive rates between groups",
-                "threshold": f"Less than {eod_thresh} considered acceptable (adjusted for this system profile)"
+                "threshold": f"Less than {eod_thresh} acceptable (adjusted for this system)"
             },
             "disparate_impact_classifier": {
                 "value": round(di_pred, 4),
                 "status": di_status(di_pred),
                 "description": "Disparate impact ratio of the classifier predictions",
-                "threshold": f"{di_lower} to {di_upper} considered acceptable (adjusted for this system profile)"
+                "threshold": f"{di_lower} to {di_upper} acceptable (adjusted for this system)"
             },
             "success": True
         }
@@ -233,7 +247,6 @@ async def assess_bias(system: CreditScoringSystem):
         from sklearn.model_selection import train_test_split
         from sklearn.preprocessing import StandardScaler
 
-        # Get adaptive thresholds based on this system's profile
         thresholds = get_adaptive_thresholds(system)
 
         X, y = load_german_credit()
@@ -246,10 +259,27 @@ async def assess_bias(system: CreditScoringSystem):
         X_test_df = X.iloc[y_test.index].reset_index(drop=True)
         y_test_series = pd.Series(y_test.values)
 
-        model = LogisticRegression(random_state=42, max_iter=1000)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        y_pred_series = pd.Series(y_pred)
+        byom_used = False
+        byom_note = None
+
+        # BYOM connector: use real external model predictions if endpoint provided
+        if system.model_api_endpoint:
+            ext_preds = call_external_model(system.model_api_endpoint, X_test_df)
+            if ext_preds is not None and len(ext_preds) == len(X_test_df):
+                y_pred_series = pd.Series(ext_preds)
+                byom_used = True
+                byom_note = f"Fairness metrics computed on real predictions from external model at {system.model_api_endpoint}."
+            else:
+                model = LogisticRegression(random_state=42, max_iter=1000)
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                y_pred_series = pd.Series(y_pred)
+                byom_note = f"External endpoint {system.model_api_endpoint} was unreachable. Fell back to logistic regression on reference dataset."
+        else:
+            model = LogisticRegression(random_state=42, max_iter=1000)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            y_pred_series = pd.Series(y_pred)
 
         age_median = X_test_df['age'].median()
         ps_median = X_test_df['personal_status'].median()
@@ -281,7 +311,6 @@ async def assess_bias(system: CreditScoringSystem):
 
         bias_detected = has_bias_in(age_metrics) or has_bias_in(status_metrics)
 
-        # If known bias issues exist, any MEDIUM finding also triggers detection
         if system.known_bias_issues:
             def has_any_bias(metrics):
                 if not metrics.get("success"):
@@ -295,7 +324,6 @@ async def assess_bias(system: CreditScoringSystem):
 
         toolkit = "IBM AIF360" if age_metrics.get("success") else "Scikit-learn fallback"
 
-        # Build adaptive recommendations based on system profile
         recommendations = [
             "Run bias audit before deployment and after every model update",
             "Monitor fairness metrics continuously in production using the thresholds applied in this report",
@@ -303,18 +331,18 @@ async def assess_bias(system: CreditScoringSystem):
         ]
 
         if bias_detected:
-            recommendations.insert(0, "URGENT: Significant bias detected under the applicable thresholds - apply mitigation before deployment")
+            recommendations.insert(0, "URGENT: Significant bias detected - apply mitigation before deployment")
             recommendations.append("Consider reweighting or resampling training data to reduce bias")
             recommendations.append("Review features correlated with age and personal status for proxy discrimination")
 
         if system.known_bias_issues:
             recommendations.insert(0 if not bias_detected else 1,
-                "Known bias issues flagged: stricter thresholds applied per EBA guidance on pre-existing fairness concerns")
-            recommendations.append("Conduct an independent third-party fairness audit before deployment")
+                "Known bias issues flagged: stricter thresholds applied per EBA guidance")
+            recommendations.append("Conduct independent third-party fairness audit before deployment")
 
         if system.uses_special_category_data:
             recommendations.append(
-                "Implement Article 10(5) safeguards: pseudonymisation, strict access controls, deletion of special category data after bias correction"
+                "Implement Article 10(5) safeguards: pseudonymisation, strict access controls, deletion after bias correction"
             )
 
         sector = (system.deployment_sector or "").lower()
@@ -323,13 +351,14 @@ async def assess_bias(system: CreditScoringSystem):
                 "Comply with EBA ML/AI Guidelines: document bias testing methodology and results for supervisory review"
             )
 
-        return {
+        result = {
             "system_name": system.system_name,
             "article": "Article 10(5) - EU AI Act",
             "assessment_type": "Bias Detection Report",
             "dataset": "German Credit (Statlog) - 1000 records",
-            "model_used": "Logistic Regression",
+            "model_used": "External Model (BYOM)" if byom_used else "Logistic Regression",
             "toolkit": toolkit,
+            "byom_connector_used": byom_used,
             "threshold_profile": thresholds,
             "fairness_analysis": {
                 "age_based": age_metrics if age_metrics.get("success") else {},
@@ -345,6 +374,11 @@ async def assess_bias(system: CreditScoringSystem):
             },
             "recommendations": recommendations
         }
+
+        if byom_note:
+            result["byom_note"] = byom_note
+
+        return result
 
     except Exception as e:
         return {

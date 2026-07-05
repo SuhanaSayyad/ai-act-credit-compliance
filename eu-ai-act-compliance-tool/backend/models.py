@@ -23,3 +23,4 @@ class CreditScoringSystem(BaseModel):
     previously_audited: bool = False
     known_bias_issues: bool = False
     model_version: str = "1.0.0"
+    model_api_endpoint: Optional[str] = None
