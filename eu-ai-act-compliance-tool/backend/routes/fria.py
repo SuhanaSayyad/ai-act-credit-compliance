@@ -9,6 +9,85 @@ from fastapi import APIRouter
 from models import CreditScoringSystem
 from database import get_driver
 
+def compute_right_confidence(right_name: str, system) -> dict:
+    """
+    Computes a confidence score for each fundamental rights assessment.
+    Confidence = (criteria confirmed / total applicable criteria) * 100
+    This quantifies how certain the tool is about each risk classification,
+    directly addressing the questionnaire-as-proxy limitation.
+    """
+    criteria_map = {
+        "Right to Privacy": {
+            "total": 3,
+            "checks": [
+                system.uses_personal_data,
+                not system.audit_logging_enabled,
+                system.third_party_data_sharing,
+            ]
+        },
+        "Right to Non-Discrimination": {
+            "total": 2,
+            "checks": [
+                system.known_bias_issues,
+                system.uses_special_category_data,
+            ]
+        },
+        "Human Dignity": {
+            "total": 2,
+            "checks": [
+                system.automated_decision_making,
+                not system.human_oversight_available,
+            ]
+        },
+        "Right to Fair Trial": {
+            "total": 1,
+            "checks": [
+                not (lambda m: m and m.strip().lower() not in ["none","no","n/a","na","none implemented","not implemented"])(system.explainability_method),
+            ]
+        },
+        "Right to Effective Remedy": {
+            "total": 1,
+            "checks": [
+                not system.human_oversight_available,
+            ]
+        },
+        "Right to Equal Treatment": {
+            "total": 2,
+            "checks": [
+                system.known_bias_issues,
+                system.uses_special_category_data,
+            ]
+        },
+        "Right to Data Protection": {
+            "total": 2,
+            "checks": [
+                system.third_party_data_sharing,
+                not system.access_controls_implemented,
+            ]
+        },
+    }
+
+    config = criteria_map.get(right_name, {"total": 1, "checks": []})
+    confirmed = sum(1 for c in config["checks"] if c)
+    total = config["total"]
+    score = round((confirmed / total) * 100) if total > 0 else 50
+
+    if score >= 75:
+        label = "HIGH CONFIDENCE"
+    elif score >= 40:
+        label = "MODERATE CONFIDENCE"
+    else:
+        label = "LOW CONFIDENCE"
+
+    return {
+        "score": score,
+        "label": label,
+        "basis": f"{confirmed} of {total} risk criteria confirmed by questionnaire responses",
+        "note": "Confidence reflects the proportion of applicable risk criteria directly evidenced by system characteristics. Low confidence indicates the assessment is based on fewer confirmed factors."
+    }
+
+
+
 router = APIRouter()
 
 
@@ -108,14 +187,19 @@ async def assess_fria(system: CreditScoringSystem):
                     mitigation = "Document review procedures formally"
 
             elif name == "Right to Fair Trial":
-                if not system.explainability_method:
+                # Check if a real explainability method was declared
+                _em = (system.explainability_method or "").strip().lower()
+                _neg = ["none implemented", "not implemented", "not applicable", "n/a", "na", "none", "no"]
+                _has_explainability = _em != "" and not any(_em.startswith(n) for n in _neg)
+
+                if not _has_explainability:
                     impact = "HIGH"
-                    justification = "Absence of explainability prevents individuals from effectively challenging decisions"
-                    mitigation = "Implement SHAP or LIME explainability before deployment"
+                    justification = "No meaningful explainability method is implemented, preventing individuals from effectively understanding and challenging decisions"
+                    mitigation = "Implement SHAP or LIME explainability before deployment to satisfy Article 13"
                 else:
                     impact = "LOW"
-                    justification = f"{system.explainability_method} supports right to understand and contest decisions"
-                    mitigation = "Ensure explanations are provided proactively at point of decision"
+                    justification = f"{system.explainability_method} supports the right to understand and effectively contest credit decisions"
+                    mitigation = "Ensure explanations are provided proactively in plain language at point of decision, not only on request"
 
             elif name == "Right to Effective Remedy":
                 if not system.human_oversight_available:
@@ -151,6 +235,7 @@ async def assess_fria(system: CreditScoringSystem):
                     justification = "No third party data sharing limits data protection risk"
                     mitigation = "Maintain current data governance practices"
 
+            confidence = compute_right_confidence(name, system)
             rights_assessed.append({
                 "right": name,
                 "article": right["article"],
@@ -158,6 +243,7 @@ async def assess_fria(system: CreditScoringSystem):
                 "dpv_uri": right.get("dpv_uri", ""),
                 "airo_uri": right.get("airo_uri", ""),
                 "impact_level": impact,
+                "confidence": confidence,
                 "impact_justification": justification,
                 "mitigation": mitigation
             })
@@ -180,7 +266,10 @@ async def assess_fria(system: CreditScoringSystem):
             "Implement human oversight measures proportionate to identified risk levels",
             "Maintain FRIA documentation for regulatory inspection for a minimum of ten years"
         ]
-        if not system.explainability_method:
+        _em_rec = (system.explainability_method or "").strip().lower()
+        _neg_rec = ["none implemented", "not implemented", "not applicable", "n/a", "na", "none", "no"]
+        _no_explainability = _em_rec == "" or any(_em_rec.startswith(n) for n in _neg_rec)
+        if _no_explainability:
             recommendations.insert(0, "URGENT: Implement SHAP or LIME explainability before deployment")
         if system.known_bias_issues:
             recommendations.insert(0, "URGENT: Resolve all known bias issues before deployment")
@@ -199,6 +288,12 @@ async def assess_fria(system: CreditScoringSystem):
             "article": "Article 27 - EU AI Act",
             "assessment_type": "Fundamental Rights Impact Assessment",
             "overall_risk_level": overall,
+            "overall_confidence": {
+                "score": round(sum(r["confidence"]["score"] for r in rights_assessed) / len(rights_assessed)) if rights_assessed else 50,
+                "label": "HIGH CONFIDENCE" if round(sum(r["confidence"]["score"] for r in rights_assessed) / len(rights_assessed)) >= 75 else "MODERATE CONFIDENCE" if round(sum(r["confidence"]["score"] for r in rights_assessed) / len(rights_assessed)) >= 40 else "LOW CONFIDENCE",
+                "basis": f"{sum(1 for r in rights_assessed if r['impact_level'] in ['HIGH', 'MEDIUM'])} of {len(rights_assessed)} rights flagged as requiring attention",
+                "note": "Overall confidence reflects the average certainty across all fundamental rights assessments based on confirmed system characteristics."
+            },
             "knowledge_graph_traversal": {
                 "method": "Multi-hop Cypher traversal: LegalArticle -[REQUIRES_ASSESSMENT_OF]-> FundamentalRight",
                 "rights_traversed": len(rights_assessed),

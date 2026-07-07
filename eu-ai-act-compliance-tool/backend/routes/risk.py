@@ -4,6 +4,53 @@ from database import get_driver
 
 router = APIRouter()
 
+def _compute_risk_confidence(code: str, score: int, system) -> dict:
+    """
+    Confidence for each risk factor based on how directly the questionnaire
+    answers confirm the risk. Higher score AND more direct evidence = higher confidence.
+    """
+    direct_evidence = {
+        "RISK_AUTOMATION":    system.automated_decision_making and not system.human_oversight_available,
+        "RISK_SPECIAL_DATA":  system.uses_special_category_data,
+        "RISK_EXPLAINABILITY": not bool((system.explainability_method or "").strip()),
+        "RISK_EXTERNAL_API":  system.external_api_access,
+        "RISK_KNOWN_BIAS":    system.known_bias_issues,
+        "RISK_NO_AUDIT":      not system.audit_logging_enabled,
+    }
+    secondary_evidence = {
+        "RISK_AUTOMATION":    system.automated_decision_making,
+        "RISK_SPECIAL_DATA":  system.uses_personal_data,
+        "RISK_EXPLAINABILITY": True,
+        "RISK_EXTERNAL_API":  not system.access_controls_implemented,
+        "RISK_KNOWN_BIAS":    system.uses_special_category_data,
+        "RISK_NO_AUDIT":      not system.previously_audited,
+    }
+    primary = direct_evidence.get(code, False)
+    secondary = secondary_evidence.get(code, False)
+    
+    if primary and secondary:
+        conf_score = 90
+        basis = "Both primary and secondary risk indicators confirmed"
+    elif primary:
+        conf_score = 75
+        basis = "Primary risk indicator directly confirmed"
+    elif secondary:
+        conf_score = 50
+        basis = "Secondary risk indicator present, primary indicator absent"
+    else:
+        conf_score = 25
+        basis = "Risk factor assessed from general system profile"
+
+    label = "HIGH CONFIDENCE" if conf_score >= 75 else "MODERATE CONFIDENCE" if conf_score >= 40 else "LOW CONFIDENCE"
+    return {
+        "score": conf_score,
+        "label": label,
+        "basis": basis,
+        "note": "Risk confidence reflects how directly the system's declared characteristics confirm this specific risk factor."
+    }
+
+
+
 @router.post("/assess")
 async def assess_risk(system: CreditScoringSystem):
     try:
@@ -103,11 +150,13 @@ async def assess_risk(system: CreditScoringSystem):
                     mitigation_status = "ADDRESSED"
                     mitigation_action = "Ensure audit logs are retained for at least six months, reviewed regularly, and protected against tampering"
 
+            risk_confidence = _compute_risk_confidence(code, score, system)
             risk_factors.append({
                 "risk_name": rf["name"],
                 "description": rf["description"],
                 "score": score,
                 "actual_severity": severity,
+                "confidence": risk_confidence,
                 "mitigation_status": mitigation_status,
                 "mitigation_action": mitigation_action
             })
@@ -137,6 +186,12 @@ async def assess_risk(system: CreditScoringSystem):
                 "high_risks": high_risks,
                 "medium_risks": medium_risks,
                 "low_risks": low_risks
+            },
+            "overall_risk_confidence": {
+                "score": round(sum(rf["confidence"]["score"] for rf in risk_factors) / len(risk_factors)) if risk_factors else 50,
+                "label": "HIGH CONFIDENCE" if round(sum(rf["confidence"]["score"] for rf in risk_factors) / len(risk_factors)) >= 75 else "MODERATE CONFIDENCE",
+                "basis": f"{outstanding} risk factors require immediate action based on confirmed system characteristics",
+                "note": "Overall risk confidence reflects how directly the questionnaire responses confirm each identified risk factor."
             },
             "article_9_compliance": {
                 "status": "NON-COMPLIANT - Outstanding actions required" if high_risks > 0 else "COMPLIANT",

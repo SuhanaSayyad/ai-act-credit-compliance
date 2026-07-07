@@ -5,6 +5,13 @@ Supports BYOM connector: if model_api_endpoint is provided, real predictions
 from the external model are used for fairness computation.
 """
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*tensorflow.*")
+warnings.filterwarnings("ignore", message=".*fairlearn.*")
+warnings.filterwarnings("ignore", message=".*inFairness.*")
+warnings.filterwarnings("ignore", message=".*No module named.*")
+
 from fastapi import APIRouter
 from models import CreditScoringSystem
 import pandas as pd

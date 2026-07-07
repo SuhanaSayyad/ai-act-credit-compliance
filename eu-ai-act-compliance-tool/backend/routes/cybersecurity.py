@@ -13,6 +13,38 @@ from database import get_driver
 
 router = APIRouter()
 
+def _compute_threat_confidence(code: str, system, applicable: bool, graph_inferred: bool) -> dict:
+    """
+    Confidence score for each threat based on confirmed system characteristics.
+    Multiple independent factors confirming the same threat = higher confidence.
+    """
+    factor_counts = {
+        "THREAT_POISON":     {"total": 2, "confirmed": sum([not system.access_controls_implemented, not system.previously_audited])},
+        "THREAT_EVASION":    {"total": 1, "confirmed": 1},  # Always applicable to all ML models
+        "THREAT_INVERSION":  {"total": 2, "confirmed": sum([system.external_api_access, system.uses_personal_data])},
+        "THREAT_EXTRACTION": {"total": 2, "confirmed": sum([system.external_api_access, not system.access_controls_implemented])},
+        "THREAT_MEMBERSHIP": {"total": 2, "confirmed": sum([system.uses_personal_data, system.uses_special_category_data])},
+        "THREAT_BACKDOOR":   {"total": 2, "confirmed": sum([not system.previously_audited, not system.access_controls_implemented])},
+        "THREAT_REPUDIATION":{"total": 2, "confirmed": sum([not system.audit_logging_enabled, not system.previously_audited])},
+        "THREAT_DOS":        {"total": 2, "confirmed": sum([system.external_api_access, not system.access_controls_implemented])},
+    }
+    fc = factor_counts.get(code, {"total": 1, "confirmed": 1 if applicable else 0})
+    total = fc["total"]
+    confirmed = fc["confirmed"]
+    score = round((confirmed / total) * 100) if total > 0 else 50
+    # Graph-inferred threats get a slight confidence boost
+    if graph_inferred and score < 100:
+        score = min(score + 10, 100)
+    label = "HIGH CONFIDENCE" if score >= 75 else "MODERATE CONFIDENCE" if score >= 40 else "LOW CONFIDENCE"
+    return {
+        "score": score,
+        "label": label,
+        "basis": f"{confirmed} of {total} threat indicators confirmed",
+        "note": "Confidence reflects the number of independent system characteristics that confirm this threat's applicability."
+    }
+
+
+
 
 @router.post("/assess")
 async def assess_cybersecurity(system: CreditScoringSystem):
@@ -24,10 +56,11 @@ async def assess_cybersecurity(system: CreditScoringSystem):
             # Single Cypher query traverses Threat -[GOVERNED_BY]-> Article
             # and Control -[MITIGATES]-> Threat in one pass
             threat_result = session.run(
-                """MATCH (t:Threat)-[:GOVERNED_BY]->(a:LegalArticle)
+                """MATCH (t:Threat)-[:GOVERNED_BY]->(a:LegalArticle {code: 'ART15'})
+                   WITH DISTINCT t, a
                    OPTIONAL MATCH (c:Control)-[:MITIGATES]->(t)
                    RETURN t, a.name as governed_by,
-                          collect(c) as mitigating_controls
+                          collect(DISTINCT c) as mitigating_controls
                    ORDER BY t.severity DESC, t.code"""
             )
             threat_rows = list(threat_result)
@@ -109,6 +142,8 @@ async def assess_cybersecurity(system: CreditScoringSystem):
             # Mark as graph-inferred if implied by risk factors
             graph_inferred = code in implied_threat_codes
 
+            # Confidence: based on how many system characteristics confirmed this threat
+            threat_confidence = _compute_threat_confidence(code, system, applicable, graph_inferred)
             threats_identified.append({
                 "threat_name": threat["name"],
                 "severity": threat["severity"],
@@ -116,6 +151,7 @@ async def assess_cybersecurity(system: CreditScoringSystem):
                 "description": threat["description"],
                 "applicable": applicable,
                 "graph_inferred": graph_inferred,
+                "confidence": threat_confidence,
                 "reason": reason,
                 "governed_by": row["governed_by"],
                 "airo_uri": threat.get("airo_uri", ""),
@@ -169,6 +205,12 @@ async def assess_cybersecurity(system: CreditScoringSystem):
             "controls_recommended": controls_recommended,
             "stride_summary": stride_summary,
             "applicable_threat_count": applicable_count,
+            "overall_security_confidence": {
+                "score": round(sum(t["confidence"]["score"] for t in threats_identified if t["applicable"]) / applicable_count) if applicable_count > 0 else 0,
+                "label": "HIGH CONFIDENCE" if applicable_count >= 5 else "MODERATE CONFIDENCE" if applicable_count >= 2 else "LOW CONFIDENCE",
+                "basis": f"{applicable_count} of 8 threat categories confirmed applicable to this system",
+                "note": "Security confidence reflects both the number of applicable threats and the strength of evidence from system characteristics."
+            },
             "recommendations": [
                 "Implement all ENISA FAICP controls recommended by the knowledge graph traversal",
                 "Conduct penetration testing against all identified applicable threats before deployment",
