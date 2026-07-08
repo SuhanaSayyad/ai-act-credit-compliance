@@ -101,7 +101,7 @@ Technological University of the Shannon, Athlone
 Student: Suhana Sayyad (A00336132)  
 Supervisor: Dr. Amit Hirway
 
-**Research gap addressed:** No existing tool automates all five mandatory EU AI Act compliance assessments for credit scoring AI in a single unified workflow.
+**Research gap addressed:** Existing literature identifies EU AI Act compliance as a critical challenge for high-risk AI deployers, yet no tool currently unifies the five mandatory assessments under Articles 9, 10(5), 13, 15, and 27 into a single automated workflow. Compliance officers must navigate fragmented tooling, manual legal interpretation, and disparate evaluation frameworks, a process estimated to require 120 to 480 minutes per system assessment. This tool reduces that to under two seconds while maintaining full legal traceability to the applicable articles.
 
 ---
 
