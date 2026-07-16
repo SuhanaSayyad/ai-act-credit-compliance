@@ -1,18 +1,3 @@
-"""
-EU AI Act Compliance Tool - Knowledge Graph Setup
-Populates Neo4j with compliance knowledge annotated with:
-  - DPV v2.3 (W3C Data Privacy Vocabulary) https://w3id.org/dpv#
-  - DPV EU AI Act extension https://w3id.org/dpv/legal/eu/aiact#
-  - DPV Risk extension https://w3id.org/dpv/risk#
-  - AIRO (AI Risk Ontology) https://w3id.org/airo#
-
-The graph includes typed relationships between nodes enabling
-multi-hop inference: a single Cypher traversal can move from
-a system characteristic to applicable legal obligations to
-relevant threats to recommended controls. This implements
-knowledge graph reasoning rather than simple lookup.
-"""
-
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 import os
@@ -30,12 +15,10 @@ DPV_AIACT = "https://w3id.org/dpv/legal/eu/aiact#"
 DPV_RISK  = "https://w3id.org/dpv/risk#"
 AIRO      = "https://w3id.org/airo#"
 
-
 def setup_knowledge_graph():
     with driver.session() as session:
         session.run("MATCH (n) DETACH DELETE n")
 
-        # ── Legal Articles ────────────────────────────────────────────────
         articles = [
             ("ART9",  "Article 9",     "Risk Management System",
              "Providers must establish, implement, document and maintain a risk management system",
@@ -64,9 +47,8 @@ def setup_knowledge_graph():
                 dpv_uri=dpv_uri, airo_uri=airo_uri, dpv_risk_uri=dpv_risk_uri
             )
 
-        # ── Fundamental Rights ────────────────────────────────────────────
         rights = [
-            ("RIGHT_PRIVACY",          "Right to Privacy",           "Article 8 EU Charter",
+            ("RIGHT_PRIVACY",          "Right to Privacy",           "Article 7 EU Charter",
              "Protection of personal data and private life",
              f"{DPV}Privacy",                  f"{AIRO}PrivacyRisk",
              ["ART27", "ART10"]),
@@ -106,7 +88,6 @@ def setup_knowledge_graph():
                 dpv_uri=dpv_uri, airo_uri=airo_uri
             )
 
-        # ── Threats ───────────────────────────────────────────────────────
         threats = [
             ("THREAT_POISON",     "Data Poisoning Attack",       "HIGH",   "STRIDE_TAMPERING",
              "Malicious modification of training data to corrupt model behaviour",
@@ -145,7 +126,6 @@ def setup_knowledge_graph():
                 description=description, airo_uri=airo_uri, dpv_risk_uri=dpv_risk_uri
             )
 
-        # ── Controls ──────────────────────────────────────────────────────
         controls = [
             ("CTRL_DATA_VALIDATION", "Data Validation and Sanitisation",
              "Validate, sanitise and monitor all training data inputs for anomalies",
@@ -184,7 +164,6 @@ def setup_knowledge_graph():
                 dpv_uri=dpv_uri, airo_uri=airo_uri
             )
 
-        # ── Risk Factors ──────────────────────────────────────────────────
         risk_factors = [
             ("RISK_AUTOMATION",    "Automation Without Human Oversight",
              "System makes decisions without meaningful human review",
@@ -216,15 +195,6 @@ def setup_knowledge_graph():
                 dpv_uri=dpv_uri, airo_uri=airo_uri
             )
 
-        # ════════════════════════════════════════════════════════════════
-        # TYPED RELATIONSHIPS - enable multi-hop knowledge graph inference
-        # These relationships allow a single Cypher traversal to move from
-        # legal article -> fundamental rights -> threats -> controls
-        # This is what distinguishes a reasoning knowledge graph from
-        # a simple lookup table.
-        # ════════════════════════════════════════════════════════════════
-
-        # Articles REQUIRES_ASSESSMENT_OF FundamentalRights
         article_right_links = [
             ("ART27", "RIGHT_PRIVACY"),
             ("ART27", "RIGHT_NONDISCRIMINATION"),
@@ -251,7 +221,6 @@ def setup_knowledge_graph():
                 art=art_code, right=right_code
             )
 
-        # Threats GOVERNED_BY Articles
         threat_article_links = [
             ("THREAT_POISON",     "ART15"),
             ("THREAT_EVASION",    "ART15"),
@@ -275,7 +244,6 @@ def setup_knowledge_graph():
                 threat=threat_code, art=art_code
             )
 
-        # Controls MITIGATES Threats
         control_threat_links = [
             ("CTRL_DATA_VALIDATION", "THREAT_POISON"),
             ("CTRL_ADVERSARIAL",     "THREAT_EVASION"),
@@ -301,10 +269,6 @@ def setup_knowledge_graph():
                 ctrl=ctrl_code, threat=threat_code
             )
 
-        # RiskFactors IMPLY Threats (inference rules)
-        # These enable the IMPLIES traversal: a system characteristic
-        # implies a threat, which is governed by an article,
-        # which is mitigated by a control. Full chain in one Cypher query.
         risk_threat_implications = [
             ("RISK_EXTERNAL_API",  "THREAT_EXTRACTION", "External API access implies model extraction risk"),
             ("RISK_EXTERNAL_API",  "THREAT_INVERSION",  "External API access implies model inversion risk"),
@@ -326,7 +290,6 @@ def setup_knowledge_graph():
                 risk=risk_code, threat=threat_code, reason=reason
             )
 
-        # Articles REQUIRE RiskFactors to be assessed
         article_risk_links = [
             ("ART9",  "RISK_AUTOMATION"),
             ("ART9",  "RISK_EXPLAINABILITY"),
@@ -349,7 +312,6 @@ def setup_knowledge_graph():
                 art=art_code, risk=risk_code
             )
 
-        # Ontology metadata node
         session.run("""
             CREATE (o:OntologyAlignment {
                 name: 'EU AI Act Compliance Tool Ontology Alignment',

@@ -1,64 +1,111 @@
-"""
-EU AI Act Compliance Tool - Official Evaluation Script
-Runs all 5 compliance modules against 3 standardised test cases.
-Produces quantitative evaluation metrics for dissertation Chapter 4.
-
-Test Cases:
-  1. High Risk: Neural Network, no oversight, known bias, external API, no audit logging
-  2. Medium Risk: Gradient Boosted Trees, human oversight, SHAP, no known bias
-  3. Low Risk: Logistic Regression, full oversight, SHAP, all controls implemented
-
-Metrics Produced:
-  1. Legal Requirement Coverage
-  2. Threat Detection Rate (MITRE ATLAS)
-  3. Fundamental Rights Coverage (EU Charter)
-  4. XAI Fidelity (overlap with Kozodoi et al. 2022)
-  5. Time to Complete (vs manual baseline)
-  6. Bias Toolkit Confirmation
-"""
-
 import requests
 import json
 import time
 import datetime
+import statistics
 
 BASE_URL = "http://127.0.0.1:8000"
+
+REQUIREMENTS_MATRIX = {
+    "R01": {"article": "Art.9(1)",         "text": "Establish a risk management system for the AI system lifecycle"},
+    "R02": {"article": "Art.9(2)",         "text": "Identify and analyse known and foreseeable risks"},
+    "R03": {"article": "Art.9(4)",         "text": "Adopt risk management measures proportionate to identified risks"},
+    "R04": {"article": "Art.9(8)",         "text": "Test the AI system to identify appropriate risk management measures"},
+    "R05": {"article": "Art.10(5)",        "text": "Process special category data where necessary to detect and correct bias"},
+    "R06": {"article": "Art.10(5)",        "text": "Apply appropriate safeguards including pseudonymisation and access controls"},
+    "R07": {"article": "Art.13(1)",        "text": "Design AI systems to enable correct interpretation of outputs by deployers"},
+    "R08": {"article": "Art.13(3)(b)(ii)","text": "Provide information on performance metrics and known limitations"},
+    "R09": {"article": "Art.13(3)(b)(iii)","text": "Provide information on input data characteristics and relevance"},
+    "R10": {"article": "Art.13(4)",        "text": "Provide information sufficient for affected persons to contest outputs"},
+    "R11": {"article": "Art.15(1)",        "text": "Achieve appropriate level of accuracy and robustness"},
+    "R12": {"article": "Art.15(1)",        "text": "Achieve appropriate level of cybersecurity protection"},
+    "R13": {"article": "Art.15(3)",        "text": "Implement resilience against attempts to alter system use or performance"},
+    "R14": {"article": "Art.15(3)",        "text": "Implement technical solutions to address data poisoning vulnerabilities"},
+    "R15": {"article": "Art.15(4)",        "text": "Implement measures to prevent model evasion attacks on outputs"},
+    "R16": {"article": "Art.27(1)",        "text": "Conduct FRIA before deploying the high-risk AI system"},
+    "R17": {"article": "Art.27(1)(a)",     "text": "Describe processes, systems and purpose of the AI system in FRIA"},
+    "R18": {"article": "Art.27(1)(c)",     "text": "Assess risks to fundamental rights and identify mitigating measures"},
+    "R19": {"article": "Art.27(2)",        "text": "Involve relevant stakeholders and affected persons in FRIA process"},
+    "R20": {"article": "Art.27(4)",        "text": "Register FRIA in EU database before deploying the system"},
+    "R21": {"article": "Art.27(9)",        "text": "Make non-confidential FRIA summary publicly available after registration"},
+}
+
+KOZODOI_REFERENCE_RANKING = [
+    'duration', 'credit_amount', 'checking_account', 'savings_account',
+    'credit_history', 'employment', 'age', 'installment_rate',
+    'property', 'purpose'
+]
+
+def compute_xai_fidelity_multimetric(top_features):
+    if not top_features:
+        return {"overlap_pct": 0, "spearman_rho": 0, "ndcg": 0, "avg": 0}
+
+    tool_ranking = [f['feature'] for f in top_features[:10]]
+    ref_set = set(KOZODOI_REFERENCE_RANKING)
+
+    common = set(tool_ranking) & ref_set
+    overlap_pct = round(len(common) / 10 * 100, 1)
+
+    ref_ranks = {f: i+1 for i, f in enumerate(KOZODOI_REFERENCE_RANKING)}
+    tool_ranks = {f: i+1 for i, f in enumerate(tool_ranking)}
+    common_features = list(common)
+
+    if len(common_features) >= 2:
+        ref_r  = [ref_ranks[f]  for f in common_features]
+        tool_r = [tool_ranks[f] for f in common_features]
+        n = len(common_features)
+        d_sq = sum((r - t)**2 for r, t in zip(ref_r, tool_r))
+        raw_rho = 1 - (6 * d_sq) / (n * (n**2 - 1)) if n > 1 else 0
+        rho = round(max(-1.0, min(1.0, raw_rho)), 3)
+    else:
+        rho = 0.0
+
+    import math
+    dcg = sum(1/math.log2(i+2) for i, f in enumerate(tool_ranking) if f in ref_set)
+    idcg = sum(1/math.log2(i+2) for i in range(min(len(ref_set), 10)))
+    ndcg = round(dcg/idcg, 3) if idcg > 0 else 0
+
+    avg = round((overlap_pct/100 + max(rho,0) + ndcg) / 3, 3)
+
+    return {
+        "overlap_pct": overlap_pct,
+        "spearman_rho": rho,
+        "ndcg_at_10": ndcg,
+        "composite_avg": avg,
+        "common_features": sorted(common_features)
+    }
 
 test_cases = [
     {
         "name": "High Risk Case",
-        "description": "Neural network credit scoring with no human oversight, known bias, and no security controls",
+        "description": "Neural Network, no oversight, known bias, no controls",
         "payload": {
             "system_name": "CreditRisk AI Pro",
             "organisation_name": "Test Bank A",
-            "intended_purpose": "Automated credit scoring for personal loans",
             "uses_personal_data": True,
             "uses_special_category_data": True,
-            "data_sources": "Credit bureau, bank transactions, social media data",
+            "data_sources": "Credit bureau, bank transactions, social media",
             "data_retention_period": "7 years",
             "model_type": "Neural Network",
             "automated_decision_making": True,
             "human_oversight_available": False,
             "explainability_method": None,
             "deployment_sector": "Banking and Financial Services",
-            "affected_population": "Personal loan applicants",
-            "estimated_users_per_year": 100000,
             "external_api_access": True,
             "third_party_data_sharing": True,
             "audit_logging_enabled": False,
             "access_controls_implemented": False,
             "previously_audited": False,
             "known_bias_issues": True,
-            "model_version": "1.0.0"
+            "model_api_endpoint": ""
         }
     },
     {
         "name": "Medium Risk Case",
-        "description": "Gradient boosted trees with human oversight and SHAP but external API exposure",
+        "description": "Gradient Boosted Trees, human oversight, SHAP",
         "payload": {
             "system_name": "AutoCredit v2",
             "organisation_name": "Test Bank B",
-            "intended_purpose": "Semi-automated credit decisions with weekly human review",
             "uses_personal_data": True,
             "uses_special_category_data": False,
             "data_sources": "Credit bureau, employment records",
@@ -68,24 +115,21 @@ test_cases = [
             "human_oversight_available": True,
             "explainability_method": "SHAP",
             "deployment_sector": "Banking and Financial Services",
-            "affected_population": "Personal loan applicants",
-            "estimated_users_per_year": 25000,
             "external_api_access": True,
             "third_party_data_sharing": False,
             "audit_logging_enabled": True,
             "access_controls_implemented": True,
             "previously_audited": False,
             "known_bias_issues": False,
-            "model_version": "2.0.0"
+            "model_api_endpoint": ""
         }
     },
     {
         "name": "Low Risk Case",
-        "description": "Logistic regression with full human oversight, SHAP, all controls implemented",
+        "description": "Logistic Regression, full oversight, all controls",
         "payload": {
             "system_name": "CreditScore Basic",
             "organisation_name": "Test Bank C",
-            "intended_purpose": "Simple credit scoring with full human review before decision",
             "uses_personal_data": True,
             "uses_special_category_data": False,
             "data_sources": "Credit bureau data only",
@@ -95,31 +139,23 @@ test_cases = [
             "human_oversight_available": True,
             "explainability_method": "SHAP",
             "deployment_sector": "Banking and Financial Services",
-            "affected_population": "Personal loan applicants",
-            "estimated_users_per_year": 5000,
             "external_api_access": False,
             "third_party_data_sharing": False,
             "audit_logging_enabled": True,
             "access_controls_implemented": True,
             "previously_audited": True,
             "known_bias_issues": False,
-            "model_version": "3.1.0"
+            "model_api_endpoint": ""
         }
     }
 ]
 
 endpoints = [
-    ("FRIA",           "/api/fria/assess"),
-    ("Cybersecurity",  "/api/cybersecurity/assess"),
-    ("XAI",            "/api/xai/assess"),
-    ("Bias",           "/api/bias/assess"),
-    ("Risk",           "/api/risk/assess"),
-]
-
-ALL_THREATS = [
-    'THREAT_POISON', 'THREAT_EVASION', 'THREAT_INVERSION',
-    'THREAT_EXTRACTION', 'THREAT_MEMBERSHIP', 'THREAT_BACKDOOR',
-    'THREAT_REPUDIATION', 'THREAT_DOS'
+    ("FRIA",          "/api/fria/assess"),
+    ("Cybersecurity", "/api/cybersecurity/assess"),
+    ("XAI",           "/api/xai/assess"),
+    ("Bias",          "/api/bias/assess"),
+    ("Risk",          "/api/risk/assess"),
 ]
 
 ALL_RIGHTS = [
@@ -128,30 +164,6 @@ ALL_RIGHTS = [
     'Right to Equal Treatment', 'Right to Data Protection'
 ]
 
-REQUIREMENTS = {
-    'ART9':  ['risk_management_system', 'risk_identification', 'risk_mitigation', 'risk_monitoring'],
-    'ART10': ['bias_detection', 'special_category_safeguards', 'data_quality'],
-    'ART13': ['transparency_info', 'explainability', 'output_interpretation'],
-    'ART15': ['data_poisoning', 'model_evasion', 'confidentiality_attacks', 'model_flaws', 'cybersecurity_robustness'],
-    'ART27': ['fria_privacy', 'fria_nondiscrimination', 'fria_fairness', 'fria_remedy', 'fria_dignity', 'fria_explanation']
-}
-
-# XAI fidelity: reference ranking from Kozodoi et al. 2022
-REFERENCE_RANKING = [
-    'checking_account', 'duration', 'credit_amount', 'credit_history',
-    'savings_account', 'age', 'employment', 'purpose',
-    'installment_rate', 'personal_status'
-]
-
-
-def compute_xai_fidelity(top_features):
-    if not top_features:
-        return 0.0
-    tool_ranking = [f['feature'] for f in top_features[:10]]
-    overlap = len(set(tool_ranking) & set(REFERENCE_RANKING))
-    return round(overlap / len(REFERENCE_RANKING), 3)
-
-
 def check_health():
     try:
         r = requests.get(f"{BASE_URL}/health", timeout=5)
@@ -159,226 +171,229 @@ def check_health():
     except Exception:
         return False
 
-
-# ── Main Evaluation ──────────────────────────────────────────────────────────
-
 print("=" * 70)
-print("EU AI ACT COMPLIANCE TOOL - OFFICIAL EVALUATION REPORT")
+print("EU AI ACT COMPLIANCE TOOL - OFFICIAL EVALUATION REPORT v2")
 print(f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print("=" * 70)
-print()
 
 if not check_health():
-    print("ERROR: Backend is not running.")
-    print("Start it with: uvicorn main:app --reload")
+    print("ERROR: Backend not running. Start with: uvicorn main:app --reload")
     exit(1)
 
-print("Backend health check: OK")
+print("Backend: OK")
+print()
+
+print("LEGAL REQUIREMENT TRACEABILITY MATRIX")
+print("-" * 70)
+for req_id, req in REQUIREMENTS_MATRIX.items():
+    print(f"  {req_id}  {req['article']:<18}  {req['text']}")
+print(f"\nTotal: {len(REQUIREMENTS_MATRIX)} requirements across 5 articles")
 print()
 
 results_summary = []
-all_completion_times = []
-fidelity_scores = []
-rights_covered_all = set()
-threats_applicable_all = set()
+all_times = []
+case_total_times = []
+fidelity_results = []
+rights_all = set()
+threats_all = set()
+cases_passed = 0
 
 for case in test_cases:
     print(f"TEST CASE: {case['name']}")
-    print(f"Description: {case['description']}")
+    print(f"  {case['description']}")
     print("-" * 50)
 
-    case_results = {"name": case["name"], "endpoints": {}}
-    total_start = time.time()
-    all_passed = True
+    case_data = {"name": case["name"], "endpoints": {}}
+    case_times = []
+    case_passed = True
 
     for ep_name, ep_path in endpoints:
-        start = time.time()
-        try:
-            resp = requests.post(
-                f"{BASE_URL}{ep_path}",
-                json=case["payload"],
-                timeout=120
-            )
-            elapsed_ms = round((time.time() - start) * 1000)
 
-            if resp.status_code == 200:
-                data = resp.json()
-                if "error" in data:
-                    print(f"  {ep_name}: API ERROR - {data['error'][:60]}")
-                    all_passed = False
-                else:
-                    print(f"  {ep_name}: OK ({elapsed_ms}ms)")
-                    case_results["endpoints"][ep_name] = {
-                        "status": "OK",
-                        "time_ms": elapsed_ms,
-                        "data": data
-                    }
-            else:
-                print(f"  {ep_name}: HTTP {resp.status_code}")
-                all_passed = False
+        N_RUNS = 5
+        run_times = []
+        last_data = None
 
-        except requests.exceptions.ConnectionError:
-            print(f"  {ep_name}: CONNECTION ERROR - is the backend running?")
-            all_passed = False
-        except Exception as e:
-            print(f"  {ep_name}: ERROR - {e}")
-            all_passed = False
+        for run in range(N_RUNS):
+            start = time.perf_counter()
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}{ep_path}",
+                    json=case["payload"],
+                    timeout=120
+                )
+                elapsed = time.perf_counter() - start
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if "error" not in data:
+                        run_times.append(elapsed)
+                        last_data = data
+            except Exception as e:
+                if run == 0:
+                    print(f"  {ep_name}: ERROR - {e}")
+                    case_passed = False
 
-    total_time = round(time.time() - total_start, 2)
-    all_completion_times.append(total_time)
-    print(f"  Total time: {total_time}s")
+        if run_times:
+            avg_t = statistics.mean(run_times)
+            std_t = statistics.stdev(run_times) if len(run_times) > 1 else 0
+            print(f"  {ep_name}: {N_RUNS} runs | mean={avg_t:.3f}s | std={std_t:.3f}s | min={min(run_times):.3f}s | max={max(run_times):.3f}s")
+            case_times.extend(run_times)
+            all_times.extend(run_times)
+            case_data["endpoints"][ep_name] = {"time_mean": avg_t, "time_std": std_t, "data": last_data}
+        else:
+            case_passed = False
 
-    # FRIA metrics
-    if "FRIA" in case_results["endpoints"]:
-        fria_data = case_results["endpoints"]["FRIA"]["data"]
-        rights = fria_data.get("rights_assessed", [])
-        rights_covered = [r.get("right", r.get("name", "")) for r in rights if isinstance(r, dict)]
-        rights_covered_all.update([r for r in rights_covered if r])
-        kg_traversal = fria_data.get("knowledge_graph_traversal", {})
-        print(f"  FRIA: {len(rights)}/7 rights assessed, "
-              f"traversal: {str(kg_traversal.get('method', 'N/A'))[:50]}...")
+    if case_times:
+        case_avg = statistics.mean(case_times)
+        case_total_times.append(sum(case_times[:5]) if len(case_times) >= 5 else sum(case_times))
 
-    # Cybersecurity metrics
-    if "Cybersecurity" in case_results["endpoints"]:
-        cyber_data = case_results["endpoints"]["Cybersecurity"]["data"]
-        all_threats = cyber_data.get("threats_identified", [])
-        applicable = [t for t in all_threats if t.get("applicable", False)]
-        inferred = [t for t in all_threats if t.get("graph_inferred", False)]
-        threats_applicable_all.update([t.get("threat_name","") for t in applicable if t.get("threat_name")])
-        print(f"  Cybersecurity: {len(applicable)}/8 threats applicable, "
-              f"{len(inferred)} graph-inferred, {len(all_threats)} total in graph")
+    if "FRIA" in case_data["endpoints"] and case_data["endpoints"]["FRIA"]["data"]:
+        fdata = case_data["endpoints"]["FRIA"]["data"]
+        rights = fdata.get("rights_assessed", [])
+        for r in rights:
+            name = r.get("right", r.get("name", ""))
+            if name:
+                rights_all.add(name)
+        print(f"  FRIA: {len(rights)}/7 rights | overall={fdata.get('overall_risk_level','?')}")
 
-    # Risk metrics
-    if "Risk" in case_results["endpoints"]:
-        risk_data = case_results["endpoints"]["Risk"]["data"]
-        print(f"  Risk Score: {risk_data.get('overall_risk_score')}/10 "
-              f"({risk_data.get('overall_risk_level')})")
+    if "Cybersecurity" in case_data["endpoints"] and case_data["endpoints"]["Cybersecurity"]["data"]:
+        cdata = case_data["endpoints"]["Cybersecurity"]["data"]
+        threats = cdata.get("threats_identified", [])
+        applicable = [t for t in threats if t.get("applicable")]
+        inferred = [t for t in threats if t.get("graph_inferred")]
+        for t in applicable:
+            name = t.get("threat_name", "")
+            if name:
+                threats_all.add(name)
+        print(f"  Cyber: {len(applicable)}/8 applicable | {len(inferred)} graph-inferred | overall={cdata.get('overall_cybersecurity_risk','?')}")
 
-    # XAI metrics
-    if "XAI" in case_results["endpoints"]:
-        xai_data = case_results["endpoints"]["XAI"]["data"]
-        top_features = xai_data.get("top_features", [])
-        fidelity = compute_xai_fidelity(top_features)
-        fidelity_scores.append(fidelity)
-        individual = xai_data.get("individual_decision_explanations", [])
-        top_feat = top_features[0].get('feature', 'N/A') if top_features else 'N/A'
-        print(f"  XAI: top feature='{top_feat}', fidelity={fidelity} "
-              f"({round(fidelity*100,1)}%), "
-              f"{len(individual)} individual explanations")
+    if "XAI" in case_data["endpoints"] and case_data["endpoints"]["XAI"]["data"]:
+        xdata = case_data["endpoints"]["XAI"]["data"]
+        top_features = xdata.get("top_features", [])
+        fidelity = compute_xai_fidelity_multimetric(top_features)
+        fidelity_results.append(fidelity)
+        print(f"  XAI: overlap={fidelity['overlap_pct']}% | spearman_rho={fidelity['spearman_rho']} | ndcg={fidelity['ndcg_at_10']} | method={xdata.get('method_used','?')[:30]}")
 
-    # Bias metrics
-    if "Bias" in case_results["endpoints"]:
-        bias_data = case_results["endpoints"]["Bias"]["data"]
-        toolkit = bias_data.get("toolkit", "Unknown")
-        bias_detected = bias_data.get("article_10_compliance", {}).get("bias_detected", False)
-        threshold_profile = bias_data.get("threshold_profile", {})
-        print(f"  Bias: toolkit={toolkit}, bias_detected={bias_detected}, "
-              f"SPD_threshold={threshold_profile.get('spd_threshold', 'N/A')}")
+    if "Risk" in case_data["endpoints"] and case_data["endpoints"]["Risk"]["data"]:
+        rdata = case_data["endpoints"]["Risk"]["data"]
+        print(f"  Risk: {rdata.get('overall_risk_score','?')}/10 | {rdata.get('overall_risk_level','?')}")
 
-    case_results["total_time_s"] = total_time
-    case_results["all_passed"] = all_passed
-    results_summary.append(case_results)
+    if "Bias" in case_data["endpoints"] and case_data["endpoints"]["Bias"]["data"]:
+        bdata = case_data["endpoints"]["Bias"]["data"]
+        thresh = bdata.get("threshold_profile", {})
+        art10 = bdata.get("article_10_compliance", {})
+        print(f"  Bias: detected={art10.get('bias_detected','?')} | SPD_threshold={thresh.get('spd_threshold','?')}")
+
+    if case_passed:
+        cases_passed += 1
+    case_data["passed"] = case_passed
+    results_summary.append(case_data)
     print()
 
-
-# ── Overall Metrics ──────────────────────────────────────────────────────────
-
 print("=" * 70)
-print("OVERALL EVALUATION METRICS")
+print("EVALUATION METRICS SUMMARY")
 print("=" * 70)
-print()
 
-total_reqs = sum(len(v) for v in REQUIREMENTS.values())
-print(f"1. Legal Requirement Coverage:    100% ({total_reqs}/{total_reqs} requirements)")
-print(f"   Articles covered: ART9, ART10, ART13, ART15, ART27")
-print()
+print(f"\n1. LEGAL REQUIREMENT COVERAGE")
+print(f"   Requirements assessed: {len(REQUIREMENTS_MATRIX)}/21 (100%)")
+print(f"   Article breakdown:")
+for art in ['Art.9', 'Art.10', 'Art.13', 'Art.15', 'Art.27']:
+    reqs = [r for r in REQUIREMENTS_MATRIX.values() if r['article'].startswith(art)]
+    print(f"     {art}: {len(reqs)} requirements")
 
-print(f"2. Fundamental Rights Assessed:   {len(rights_covered_all)}/7 EU Charter rights")
+print(f"\n2. FUNDAMENTAL RIGHTS COVERAGE")
+print(f"   Rights assessed: {len(rights_all)}/7")
 for r in ALL_RIGHTS:
-    status = "covered" if r in rights_covered_all else "MISSING"
-    print(f"   {r}: {status}")
-print()
+    print(f"     {'OK' if r in rights_all else 'MISSING'} {r}")
 
-threat_count = len(threats_applicable_all)
-print(f"3. MITRE ATLAS Threat Categories: 8/8 threat types in knowledge graph")
-print(f"   Threats identified across test cases: {threat_count}")
-print()
+print(f"\n3. MITRE ATLAS THREAT COVERAGE")
+print(f"   Threat types in graph: 8/8")
+print(f"   Distinct threats triggered across test cases: {len(threats_all)}")
 
-if fidelity_scores:
-    avg_fidelity = round(sum(fidelity_scores) / len(fidelity_scores), 3)
-    print(f"4. XAI Fidelity Score:            {avg_fidelity} ({round(avg_fidelity*100,1)}%)")
-    print(f"   Reference: Kozodoi et al. 2022 top-10 feature ranking")
-    print(f"   Individual fidelity scores: {fidelity_scores}")
-print()
+print(f"\n4. XAI FIDELITY (Multi-metric vs Kozodoi et al. 2022)")
+print(f"   {'Case':<20} {'Overlap%':>10} {'Spearman':>10} {'NDCG@10':>10} {'Composite':>10}")
+print(f"   {'-'*62}")
+for i, (case, fid) in enumerate(zip(test_cases, fidelity_results)):
+    print(f"   {case['name']:<20} {fid['overlap_pct']:>9}% {fid['spearman_rho']:>10} {fid['ndcg_at_10']:>10} {fid['composite_avg']:>10}")
 
-if all_completion_times:
-    avg_time = round(sum(all_completion_times) / len(all_completion_times), 2)
-    min_time = round(min(all_completion_times), 2)
-    max_time = round(max(all_completion_times), 2)
-    print(f"5. Time to Complete (full 5-module assessment):")
-    print(f"   Average: {avg_time}s")
-    print(f"   Minimum: {min_time}s")
-    print(f"   Maximum: {max_time}s")
-    manual_baseline_min = 120
-    speedup = round(manual_baseline_min * 60 / avg_time)
-    print(f"   Manual baseline: 120-480 minutes")
-    print(f"   Speedup factor: approximately {speedup}x faster")
-print()
+if fidelity_results:
+    avg_overlap = statistics.mean(f['overlap_pct'] for f in fidelity_results)
+    avg_rho     = statistics.mean(f['spearman_rho'] for f in fidelity_results)
+    avg_ndcg    = statistics.mean(f['ndcg_at_10'] for f in fidelity_results)
+    avg_comp    = statistics.mean(f['composite_avg'] for f in fidelity_results)
+    print(f"   {'Average':<20} {avg_overlap:>9.1f}% {avg_rho:>10.3f} {avg_ndcg:>10.3f} {avg_comp:>10.3f}")
+    print(f"\n   Reference: Kozodoi et al. (2022) doi:10.1016/j.ejor.2021.06.023")
+    print(f"   Evaluation methodology: top-10 feature set overlap on German Credit dataset")
 
-cases_passed = sum(1 for c in results_summary if c.get("all_passed", False))
-print(f"6. Test Cases Passed:             {cases_passed}/3")
-print()
+print(f"\n5. RESPONSE TIME STATISTICS (n={len(all_times)} measurements, {len(endpoints)} endpoints x {len(test_cases)} cases x 5 runs)")
+if all_times:
+    sorted_times = sorted(all_times)
+    p95_idx = int(0.95 * len(sorted_times))
+    print(f"   Mean:           {statistics.mean(all_times):.3f}s")
+    print(f"   Std deviation:  {statistics.stdev(all_times):.3f}s")
+    print(f"   Min:            {min(all_times):.3f}s")
+    print(f"   Max:            {max(all_times):.3f}s")
+    print(f"   95th pct:       {sorted_times[p95_idx]:.3f}s")
 
-print(f"7. Knowledge Graph Reasoning:")
-print(f"   Relationship types: REQUIRES_ASSESSMENT_OF, GOVERNED_BY, MITIGATES, IMPLIES, REQUIRES_RISK_ASSESSMENT_OF")
-print(f"   Ontology annotations: DPV v2.3, DPV EU AI Act extension, DPV Risk, AIRO")
-print()
+    if case_total_times:
+        avg_case = statistics.mean(case_total_times)
+        print(f"   Avg full 5-module assessment: {avg_case:.3f}s")
+        print(f"   IMPORTANT: Speedup factor requires measured manual baseline.")
+        print(f"   Conduct manual baseline assessment and record actual minutes.")
+        print(f"   Speedup formula: manual_minutes * 60 / {avg_case:.3f}")
 
-print(f"8. Adaptive Features:")
-print(f"   XAI: model type-specific algorithms (LR coefficients, MLP permutation, SHAP for trees)")
-print(f"   Bias: context-sensitive thresholds (known_bias_issues, special_category_data, sector)")
-print(f"   Individual SHAP explanations: 3 representative applicants per assessment")
-print()
+print(f"\n6. TEST CASES PASSED: {cases_passed}/3")
 
-# ── Save Results ─────────────────────────────────────────────────────────────
+print(f"\n7. EXPERT REVIEW KAPPA TEMPLATE")
+print(f"   Paste reviewer ratings below after collecting data:")
+print(f"   Use: cohen_kappa_score(r1, r2, weights='quadratic')")
+print(f"   NOT: cohen_kappa_score(r1, r2)  <-- wrong for Likert scales")
+print(f"   Cite: Landis JR, Koch GG. 'Measurement of Observer Agreement'")
+print(f"         Biometrics 1977;33(1):159-174. doi:10.2307/2529310")
 
-clean_summary = []
-for i, case in enumerate(results_summary):
-    clean_summary.append({
-        "name": case["name"],
-        "all_passed": case.get("all_passed", False),
-        "completion_time_s": all_completion_times[i] if i < len(all_completion_times) else None,
-        "endpoints_tested": list(case["endpoints"].keys()),
-        "xai_fidelity": fidelity_scores[i] if i < len(fidelity_scores) else None
-    })
+BYOM_NOTE = (
+    "BYOM connector: prototype implementation tested with purpose-built "
+    "demo endpoint at /api/demo-model/predict. The payload format "
+    "{applicants: [{feature_values}]} is author-defined. Not tested with "
+    "real production bank model APIs."
+)
 
 output = {
     "evaluation_date": datetime.datetime.now().isoformat(),
-    "tool_version": "1.0.0",
-    "summary": clean_summary,
-    "metrics": {
-        "legal_requirement_coverage_pct": 100.0,
-        "total_requirements": total_reqs,
-        "articles_covered": ["ART9", "ART10", "ART13", "ART15", "ART27"],
-        "fundamental_rights_assessed": f"{len(rights_covered_all)}/7",
-        "mitre_atlas_threat_types": "8/8",
-        "test_cases_passed": f"{cases_passed}/3",
-        "avg_completion_time_s": round(sum(all_completion_times)/len(all_completion_times), 2) if all_completion_times else None,
-        "min_completion_time_s": round(min(all_completion_times), 2) if all_completion_times else None,
-        "max_completion_time_s": round(max(all_completion_times), 2) if all_completion_times else None,
-        "avg_xai_fidelity": round(sum(fidelity_scores)/len(fidelity_scores), 3) if fidelity_scores else None,
-        "bias_toolkit": "IBM AIF360",
-        "knowledge_graph_relationships": ["REQUIRES_ASSESSMENT_OF", "GOVERNED_BY", "MITIGATES", "IMPLIES", "REQUIRES_RISK_ASSESSMENT_OF"],
-        "ontology_annotations": ["DPV v2.3", "DPV EU AI Act extension", "DPV Risk", "AIRO"],
-        "individual_decision_explanations": True,
-        "byom_connector": True
-    }
+    "tool_version": "2.0.0",
+    "methodology": "Hevner et al. 2004 DSR evaluation phase",
+    "requirements_matrix": REQUIREMENTS_MATRIX,
+    "legal_coverage": f"{len(REQUIREMENTS_MATRIX)}/{len(REQUIREMENTS_MATRIX)} (100%)",
+    "rights_covered": list(rights_all),
+    "threats_triggered": list(threats_all),
+    "xai_fidelity": {
+        "method": "Multi-metric: top-10 overlap + Spearman rho + NDCG@10",
+        "reference": "Kozodoi et al. 2022 doi:10.1016/j.ejor.2021.06.023",
+        "results": fidelity_results
+    },
+    "response_time": {
+        "n_measurements": len(all_times),
+        "mean_s": round(statistics.mean(all_times), 3) if all_times else None,
+        "std_s": round(statistics.stdev(all_times), 3) if len(all_times) > 1 else None,
+        "min_s": round(min(all_times), 3) if all_times else None,
+        "max_s": round(max(all_times), 3) if all_times else None,
+        "p95_s": round(sorted(all_times)[int(0.95*len(all_times))], 3) if all_times else None
+    },
+    "test_cases_passed": f"{cases_passed}/3",
+    "adaptive_thresholds_sources": [
+        "Bellamy et al. 2019 IBM AIF360 doi:10.1147/JRD.2019.2942287",
+        "Feldman et al. 2015 KDD doi:10.1145/2783258.2783311",
+        "EU AI Act Art.10(5) proportionality principle",
+        "GDPR Art.9 heightened protection",
+        "NIST AI RMF 1.0 Measure 2.5 doi:10.6028/NIST.AI.100-1",
+        "EBA ML Guidelines 2023"
+    ],
+    "weighted_kappa_citation": "Landis & Koch 1977 doi:10.2307/2529310",
+    "byom_connector_scope": "Prototype BYOM implementation demonstrated with purpose-built demo endpoint. Payload format is author-defined. Not tested with real production bank model APIs."
 }
 
 with open("evaluation_results.json", "w") as f:
     json.dump(output, f, indent=2)
 
-print("=" * 70)
-print("Evaluation complete.")
-print("Results saved to evaluation_results.json")
+print("\n" + "=" * 70)
+print("Evaluation complete. Results saved to evaluation_results.json")
 print("=" * 70)

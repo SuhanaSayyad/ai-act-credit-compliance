@@ -1,10 +1,3 @@
-"""
-Bias Detection Module - Article 10(5) EU AI Act
-IBM AIF360 fairness metrics with adaptive thresholds based on system profile.
-Supports BYOM connector: if model_api_endpoint is provided, real predictions
-from the external model are used for fairness computation.
-"""
-
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", message=".*tensorflow.*")
@@ -20,7 +13,6 @@ import os
 import requests
 
 router = APIRouter()
-
 
 def load_german_credit():
     data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'german_credit.csv')
@@ -73,9 +65,7 @@ def load_german_credit():
     y = (df['target'] == 2).astype(int).reset_index(drop=True)
     return X, y
 
-
 def call_external_model(endpoint: str, X_sample: pd.DataFrame):
-    """Calls external model API for real predictions."""
     try:
         payload = {"applicants": X_sample.to_dict(orient='records')}
         response = requests.post(endpoint, json=payload, timeout=30)
@@ -87,14 +77,8 @@ def call_external_model(endpoint: str, X_sample: pd.DataFrame):
     except Exception:
         return None
 
-
 def get_adaptive_thresholds(system: CreditScoringSystem):
-    """
-    Returns thresholds that adapt based on system context.
-    Known bias issues, special category data, and deployment sector
-    all tighten acceptable thresholds, producing different assessments
-    for different system profiles.
-    """
+
     spd_threshold = 0.05
     di_lower = 0.80
     di_upper = 1.25
@@ -129,10 +113,8 @@ def get_adaptive_thresholds(system: CreditScoringSystem):
         )
     }
 
-
 def compute_aif360_metrics(X, y, y_pred, protected_col, privileged_val,
                             group_a_name, group_b_name, thresholds):
-    """Compute AIF360 fairness metrics with adaptive thresholds."""
     try:
         from aif360.metrics import BinaryLabelDatasetMetric, ClassificationMetric
         from aif360.datasets import BinaryLabelDataset
@@ -246,7 +228,6 @@ def compute_aif360_metrics(X, y, y_pred, protected_col, privileged_val,
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-
 @router.post("/assess")
 async def assess_bias(system: CreditScoringSystem):
     try:
@@ -269,7 +250,6 @@ async def assess_bias(system: CreditScoringSystem):
         byom_used = False
         byom_note = None
 
-        # BYOM connector: use real external model predictions if endpoint provided
         if system.model_api_endpoint:
             ext_preds = call_external_model(system.model_api_endpoint, X_test_df)
             if ext_preds is not None and len(ext_preds) == len(X_test_df):

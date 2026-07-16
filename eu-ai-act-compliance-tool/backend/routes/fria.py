@@ -1,21 +1,8 @@
-"""
-FRIA Module - Article 27 EU AI Act
-Fundamental Rights Impact Assessment using multi-hop knowledge graph traversal.
-The Cypher query traverses: LegalArticle -[REQUIRES_ASSESSMENT_OF]-> FundamentalRight
-This is genuine knowledge graph reasoning, not a simple lookup.
-"""
-
 from fastapi import APIRouter
 from models import CreditScoringSystem
 from database import get_driver
 
 def compute_right_confidence(right_name: str, system) -> dict:
-    """
-    Computes a confidence score for each fundamental rights assessment.
-    Confidence = (criteria confirmed / total applicable criteria) * 100
-    This quantifies how certain the tool is about each risk classification,
-    directly addressing the questionnaire-as-proxy limitation.
-    """
     criteria_map = {
         "Right to Privacy": {
             "total": 3,
@@ -86,10 +73,7 @@ def compute_right_confidence(right_name: str, system) -> dict:
         "note": "Confidence reflects the proportion of applicable risk criteria directly evidenced by system characteristics. Low confidence indicates the assessment is based on fewer confirmed factors."
     }
 
-
-
 router = APIRouter()
-
 
 @router.post("/assess")
 async def assess_fria(system: CreditScoringSystem):
@@ -97,18 +81,12 @@ async def assess_fria(system: CreditScoringSystem):
         driver = get_driver()
         with driver.session() as session:
 
-            # ── Multi-hop inference: traverse article -> rights ───────────
-            # This single Cypher query traverses the REQUIRES_ASSESSMENT_OF
-            # relationship, which is the graph reasoning step.
             rights_result = session.run(
                 """MATCH (a:LegalArticle {code: 'ART27'})-[:REQUIRES_ASSESSMENT_OF]->(r:FundamentalRight)
                    RETURN r ORDER BY r.code"""
             )
             rights = [record["r"] for record in rights_result]
 
-            # ── Multi-hop: infer additional obligations via graph ─────────
-            # Traverse: RiskFactor -[IMPLIES]-> Threat -[GOVERNED_BY]-> Article
-            # This finds which threats are implied by this system's risk profile
             implied_threats = []
             if system.external_api_access:
                 threat_result = session.run(
@@ -119,7 +97,6 @@ async def assess_fria(system: CreditScoringSystem):
                 )
                 implied_threats = [dict(r) for r in threat_result]
 
-            # ── Multi-hop: article -> risk factors it requires ────────────
             risk_req_result = session.run(
                 """MATCH (a:LegalArticle)-[:REQUIRES_RISK_ASSESSMENT_OF]->(rf:RiskFactor)
                    WHERE a.code IN ['ART27', 'ART10', 'ART13']
@@ -127,7 +104,6 @@ async def assess_fria(system: CreditScoringSystem):
             )
             required_risk_assessments = [dict(r) for r in risk_req_result]
 
-            # ── Fetch obligations ─────────────────────────────────────────
             obligations_result = session.run(
                 """MATCH (a:LegalArticle)
                    WHERE a.code IN ['ART27', 'ART10', 'ART13', 'ART9']
@@ -136,7 +112,6 @@ async def assess_fria(system: CreditScoringSystem):
             )
             obligations_data = [dict(r) for r in obligations_result]
 
-        # ── Assess each right ─────────────────────────────────────────────
         rights_assessed = []
         for right in rights:
             impact = "LOW"
@@ -147,11 +122,11 @@ async def assess_fria(system: CreditScoringSystem):
             if name == "Right to Privacy":
                 if system.uses_personal_data and not system.audit_logging_enabled:
                     impact = "HIGH"
-                    justification = "Personal data processed without audit logging creates accountability gaps under GDPR Article 5(1)(f)"
+                    justification = "Personal data processed without audit logging creates accountability gaps under Article 7 EU Charter and GDPR Article 5(1)(f)"
                     mitigation = "Implement tamper-evident audit logging and data minimisation practices"
                 elif system.uses_personal_data:
                     impact = "MEDIUM"
-                    justification = "Personal data processing triggers GDPR obligations including data subject rights"
+                    justification = "Personal data processing engages Article 7 EU Charter (private life) and GDPR obligations including data subject rights"
                     mitigation = "Ensure retention policies are enforced and documented for regulatory inspection"
                 else:
                     impact = "LOW"
@@ -187,7 +162,7 @@ async def assess_fria(system: CreditScoringSystem):
                     mitigation = "Document review procedures formally"
 
             elif name == "Right to Fair Trial":
-                # Check if a real explainability method was declared
+
                 _em = (system.explainability_method or "").strip().lower()
                 _neg = ["none implemented", "not implemented", "not applicable", "n/a", "na", "none", "no"]
                 _has_explainability = _em != "" and not any(_em.startswith(n) for n in _neg)
@@ -274,7 +249,6 @@ async def assess_fria(system: CreditScoringSystem):
         if system.known_bias_issues:
             recommendations.insert(0, "URGENT: Resolve all known bias issues before deployment")
 
-        # ── Build obligations from graph traversal ────────────────────────
         obligations = [
             {"article": "Article 27(1)", "requirement": "Conduct FRIA before putting high-risk AI into service"},
             {"article": "Article 27(4)", "requirement": "Register FRIA in the EU database before deployment"},
