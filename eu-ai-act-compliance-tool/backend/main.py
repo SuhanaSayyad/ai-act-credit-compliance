@@ -4,17 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes import fria, cybersecurity, xai, bias, risk, demo_model
 import threading
 
-# This prints immediately when the module loads so Hugging Face
-# can see output before uvicorn even starts
 print("=== EU AI Act Compliance Tool starting ===", flush=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Lifespan startup: connecting to Neo4j in background...", flush=True)
 
-    # Run Neo4j connection in a background thread so it never
-    # blocks the event loop. The /health endpoint responds instantly
-    # regardless of whether Neo4j has connected yet.
     def background_connect():
         try:
             from database import test_connection
@@ -26,10 +21,7 @@ async def lifespan(app: FastAPI):
 
     t = threading.Thread(target=background_connect, daemon=True)
     t.start()
-    # Wait max 15 seconds for Neo4j during startup
-    # If it takes longer the server still starts healthy
     t.join(timeout=15)
-
     print("Startup complete. API is ready.", flush=True)
     yield
     print("Shutting down.", flush=True)
@@ -70,6 +62,16 @@ async def root():
 
 @app.get("/health")
 async def health():
-    # Must respond instantly. No database calls here.
-    # Hugging Face uses this to decide if the container is alive.
     return {"status": "healthy", "service": "eu-ai-act-compliance-tool"}
+
+
+@app.get("/health/neo4j")
+async def health_neo4j():
+    try:
+        import asyncio
+        from database import test_connection
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, test_connection)
+        return {"status": "healthy", "neo4j": "connected"}
+    except Exception as e:
+        return {"status": "degraded", "neo4j": str(e)}
