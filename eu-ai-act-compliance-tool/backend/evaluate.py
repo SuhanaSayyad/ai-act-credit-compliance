@@ -4,7 +4,7 @@ import time
 import datetime
 import statistics
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "https://suhanasayyad-ai-act-compliance-backend.hf.space"
 
 REQUIREMENTS_MATRIX = {
     "R01": {"article": "Art.9(1)",         "text": "Establish a risk management system for the AI system lifecycle"},
@@ -91,6 +91,10 @@ test_cases = [
         "payload": {
             "system_name": "CreditRisk AI Pro",
             "organisation_name": "Test Bank A",
+            "intended_purpose": "Automated credit scoring for personal loan applications",
+            "affected_population": "Personal loan applicants",
+            "estimated_users_per_year": 50000,
+            "model_version": "1.0.0",
             "uses_personal_data": True,
             "uses_special_category_data": True,
             "data_sources": "Credit bureau, bank transactions, social media",
@@ -115,6 +119,10 @@ test_cases = [
         "payload": {
             "system_name": "AutoCredit v2",
             "organisation_name": "Test Bank B",
+            "intended_purpose": "Semi-automated credit scoring with human review",
+            "affected_population": "Personal and business loan applicants",
+            "estimated_users_per_year": 25000,
+            "model_version": "2.0.0",
             "uses_personal_data": True,
             "uses_special_category_data": False,
             "data_sources": "Credit bureau, employment records",
@@ -139,6 +147,10 @@ test_cases = [
         "payload": {
             "system_name": "CreditScore Basic",
             "organisation_name": "Test Bank C",
+            "intended_purpose": "Automated credit scoring with full human oversight",
+            "affected_population": "Personal loan applicants",
+            "estimated_users_per_year": 10000,
+            "model_version": "1.0.0",
             "uses_personal_data": True,
             "uses_special_category_data": False,
             "data_sources": "Credit bureau data only",
@@ -273,7 +285,7 @@ for case in test_cases:
             name = t.get("threat_name", "")
             if name:
                 threats_all.add(name)
-        print(f"  Cyber: {len(applicable)}/8 applicable | {len(inferred)} graph-inferred | overall={cdata.get('overall_cybersecurity_risk','?')}")
+        print(f"  Cyber: {len(applicable)}/8 applicable | {len(inferred)} graph-inferred | overall={cdata.get('overall_security_risk','?')}")
 
     if "XAI" in case_data["endpoints"] and case_data["endpoints"]["XAI"]["data"]:
         xdata = case_data["endpoints"]["XAI"]["data"]
