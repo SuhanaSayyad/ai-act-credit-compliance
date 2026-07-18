@@ -53,12 +53,20 @@ def compute_xai_fidelity_multimetric(top_features):
     if len(common_features) >= 2:
         ref_r  = [ref_ranks[f]  for f in common_features]
         tool_r = [tool_ranks[f] for f in common_features]
-        n = len(common_features)
-        d_sq = sum((r - t)**2 for r, t in zip(ref_r, tool_r))
-        raw_rho = 1 - (6 * d_sq) / (n * (n**2 - 1)) if n > 1 else 0
-        rho = round(max(-1.0, min(1.0, raw_rho)), 3)
+        try:
+            from scipy.stats import spearmanr
+            scipy_rho, scipy_p = spearmanr(ref_r, tool_r)
+            rho = round(float(scipy_rho), 4)
+            p_value = round(float(scipy_p), 4)
+        except ImportError:
+            n = len(common_features)
+            d_sq = sum((r - t)**2 for r, t in zip(ref_r, tool_r))
+            raw_rho = 1 - (6 * d_sq) / (n * (n**2 - 1)) if n > 1 else 0
+            rho = round(max(-1.0, min(1.0, raw_rho)), 4)
+            p_value = None
     else:
         rho = 0.0
+        p_value = None
 
     import math
     dcg = sum(1/math.log2(i+2) for i, f in enumerate(tool_ranking) if f in ref_set)
@@ -70,6 +78,7 @@ def compute_xai_fidelity_multimetric(top_features):
     return {
         "overlap_pct": overlap_pct,
         "spearman_rho": rho,
+        "spearman_p_value": p_value,
         "ndcg_at_10": ndcg,
         "composite_avg": avg,
         "common_features": sorted(common_features)
