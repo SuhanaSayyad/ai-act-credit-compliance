@@ -89,7 +89,7 @@ test_cases = [
         "name": "High Risk Case",
         "description": "Neural Network, no oversight, known bias, no controls",
         "payload": {
-            "system_name": "CreditRisk AI Pro",
+            "system_name": "CreditAccess",
             "organisation_name": "Test Bank A",
             "intended_purpose": "Automated credit scoring for personal loan applications",
             "affected_population": "Personal loan applicants",
