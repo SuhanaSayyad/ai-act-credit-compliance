@@ -3,8 +3,8 @@ import requests, json, time, statistics, os
 BASE = "https://suhanasayyad-ai-act-compliance-backend.hf.space"
 
 BASELINE = {
-    "system_name": "CreditAccess",
-    "organisation_name": "Test Bank Ireland",
+    "system_name": "CreditAccess Lite",
+    "organisation_name": "Allied Credit Bank",
     "intended_purpose": "Automated credit scoring for personal loan applications",
     "uses_personal_data": True,
     "uses_special_category_data": False,

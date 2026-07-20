@@ -90,7 +90,7 @@ test_cases = [
         "description": "Neural Network, no oversight, known bias, no controls",
         "payload": {
             "system_name": "CreditAccess",
-            "organisation_name": "Test Bank A",
+            "organisation_name": "Test Bank Ireland",
             "intended_purpose": "Automated credit scoring for personal loan applications",
             "affected_population": "Personal loan applicants",
             "estimated_users_per_year": 50000,
@@ -117,8 +117,8 @@ test_cases = [
         "name": "Medium Risk Case",
         "description": "Gradient Boosted Trees, human oversight, SHAP",
         "payload": {
-            "system_name": "AutoCredit v2",
-            "organisation_name": "Test Bank B",
+            "system_name": "CreditAccess Pro",
+            "organisation_name": "Allied Credit Bank",
             "intended_purpose": "Semi-automated credit scoring with human review",
             "affected_population": "Personal and business loan applicants",
             "estimated_users_per_year": 25000,
@@ -145,8 +145,8 @@ test_cases = [
         "name": "Low Risk Case",
         "description": "Logistic Regression, full oversight, all controls",
         "payload": {
-            "system_name": "CreditScore Basic",
-            "organisation_name": "Test Bank C",
+            "system_name": "CreditAccess Lite",
+            "organisation_name": "Regional Savings Bank",
             "intended_purpose": "Automated credit scoring with full human oversight",
             "affected_population": "Personal loan applicants",
             "estimated_users_per_year": 10000,
