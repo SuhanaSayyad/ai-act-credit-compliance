@@ -2,150 +2,140 @@ import { useState } from "react";
 import { QuestionnairePage } from "./components/QuestionnairePage";
 import { ResultsPage } from "./components/ResultsPage";
 
-const NAVY = "#0A0E1A";
-const NAVY_LIGHT = "#111827";
-const WHITE = "#FFFFFF";
-const GREY = "#F8F9FA";
+export interface ApiResults {
+  fria: any;
+  cybersecurity: any;
+  xai: any;
+  risk: any;
+  bias: any;
+  systemName: string;
+  organisationName: string;
+  failedModules?: string[];
+}
 
-const ARTICLES = [
-  { id: "art9",  label: "Art. 9",     dot: "#B45309" },
-  { id: "art10", label: "Art. 10(5)", dot: "#6D28D9" },
-  { id: "art13", label: "Art. 13",    dot: "#047857" },
-  { id: "art15", label: "Art. 15",    dot: "#B91C1C" },
-  { id: "art27", label: "Art. 27",    dot: "#1E40AF" },
-];
+const NAVY  = "#0F1420";
+const BLUE  = "#1E40AF";
+const WHITE = "#FFFFFF";
+const GREY  = "#F8F9FA";
+const TEXT  = "#111827";
+const MUTED = "#6B7280";
+const FONT_SERIF = "Georgia, 'Times New Roman', serif";
+const FONT_SANS  = "'Inter', system-ui, sans-serif";
+const FONT_MONO  = "'IBM Plex Mono', monospace";
 
 const MODULES = [
-  { article: "Art. 9",     color: "#B45309", name: "Risk Management System",           description: "Continuous identification, analysis, and mitigation of known and foreseeable risks across the AI lifecycle." },
-  { article: "Art. 10(5)", color: "#6D28D9", name: "Bias and Fairness Assessment",     description: "Statistical evaluation of training data for discriminatory patterns affecting protected characteristics." },
-  { article: "Art. 13",    color: "#047857", name: "Transparency and Explainability",  description: "SHAP-based feature attribution for individual credit decisions, fulfilling Article 13 explanation obligations." },
-  { article: "Art. 15",    color: "#B91C1C", name: "Cybersecurity and Robustness",     description: "MITRE ATLAS and STRIDE-AI threat model with knowledge graph-inferred attack surface analysis." },
-  { article: "Art. 27",    color: "#1E40AF", name: "Fundamental Rights Impact Assessment", description: "Multi-hop knowledge graph traversal assessing all 7 EU Charter rights for the described system." },
+  { article: "Art. 9",     color: "#B45309", name: "Risk Management System",              description: "Continuous identification, analysis, and mitigation of known and foreseeable risks across the AI lifecycle." },
+  { article: "Art. 10(5)", color: "#6D28D9", name: "Bias and Fairness Assessment",         description: "Statistical evaluation of training data for discriminatory patterns affecting protected characteristics." },
+  { article: "Art. 13",    color: "#047857", name: "Transparency and Explainability",      description: "Documentation of model logic, output interpretability, and disclosure obligations to affected individuals." },
+  { article: "Art. 15",    color: "#B91C1C", name: "Cybersecurity and Robustness",         description: "Resilience evaluation against adversarial inputs, model drift, and critical failure scenarios." },
+  { article: "Art. 27",    color: "#1E40AF", name: "Fundamental Rights Impact Assessment", description: "Structured evaluation of material impacts on autonomy, equality, and individual rights." },
 ];
 
 const STEPS = [
-  { n: "01", title: "Complete the questionnaire", desc: "Answer structured questions about your AI system, its data sources, and deployment context." },
-  { n: "02", title: "Knowledge graph traversal",  desc: "Your responses are mapped against EU AI Act articles using a Neo4j knowledge graph with DPV and AIRO ontology annotations." },
-  { n: "03", title: "Multi-module assessment",    desc: "Five parallel compliance engines evaluate risk, bias, explainability, cybersecurity, and fundamental rights." },
-  { n: "04", title: "Structured reports",         desc: "Download audit-ready compliance reports in PDF, CSV, or JSON formats with full legal traceability." },
+  { n: "01", title: "Complete the questionnaire", desc: "Answer a single structured set of questions about your AI system, its data, and its deployment context." },
+  { n: "02", title: "System analysis",             desc: "Your responses are mapped against each article's requirements and scored against the regulatory standard." },
+  { n: "03", title: "Reports generated",           desc: "Five independent compliance reports are produced simultaneously, each citing the relevant provisions." },
+  { n: "04", title: "Export and act",              desc: "Download structured PDF, CSV, or JSON reports ready for submission to your compliance or legal team." },
 ];
+
+const btnPrimary: React.CSSProperties = {
+  fontFamily: FONT_SANS, fontWeight: 600, fontSize: "14px", letterSpacing: "0.01em",
+  color: WHITE, background: BLUE, border: "none", borderRadius: "4px", padding: "13px 28px", cursor: "pointer",
+};
+const btnGhost: React.CSSProperties = {
+  fontFamily: FONT_SANS, fontWeight: 500, fontSize: "14px", letterSpacing: "0.01em",
+  color: "rgba(255,255,255,0.8)", background: "transparent",
+  border: "1px solid rgba(255,255,255,0.3)", borderRadius: "4px", padding: "13px 28px", cursor: "pointer",
+};
 
 export default function App() {
   const [page, setPage] = useState<"landing" | "questionnaire" | "results">("landing");
-  const [results, setResults] = useState<any>(null);
+  const [apiResults, setApiResults] = useState<ApiResults | null>(null);
 
   if (page === "questionnaire") {
     return (
       <QuestionnairePage
         onBack={() => setPage("landing")}
-        onComplete={(data) => {
-          setResults(data);
-          setPage("results");
-        }}
+        onComplete={(results) => { setApiResults(results); setPage("results"); }}
       />
     );
   }
 
-  if (page === "results" && results) {
+  if (page === "results") {
     return (
       <ResultsPage
-        results={results}
+        apiResults={apiResults}
         onBack={() => setPage("questionnaire")}
+        onHome={() => setPage("landing")}
       />
     );
   }
 
   return (
-    <div style={{ fontFamily:"'IBM Plex Sans',sans-serif", background:WHITE, color:NAVY, minHeight:"100vh" }}>
-      {/* NAVBAR */}
-      <nav style={{ background:NAVY, padding:"0 48px", display:"flex", alignItems:"center", justifyContent:"space-between", height:"56px", position:"sticky", top:0, zIndex:100, borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:"14px" }}>
-          <div style={{ width:"32px", height:"32px", background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.18)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", fontWeight:500, color:WHITE, letterSpacing:"0.02em" }}>EU</span>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:"1px" }}>
-            <span style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:500, fontSize:"14px", color:WHITE, letterSpacing:"0.01em", lineHeight:1 }}>AI Act Compliance Tool</span>
-            <span style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"10px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.06em", lineHeight:1 }}>Regulation 2024/1689</span>
-          </div>
+    <div style={{ fontFamily: FONT_SANS, background: WHITE, color: TEXT, minHeight: "100vh" }}>
+      <section style={{ background: NAVY, padding: "112px 56px 120px", textAlign: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", marginBottom: "48px" }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", fontWeight: 500, color: "#FCA5A5", background: "rgba(185,28,28,0.18)", border: "1px solid rgba(185,28,28,0.3)", borderRadius: "3px", padding: "4px 10px" }}>HIGH-RISK AI</span>
+          <span style={{ color: "rgba(255,255,255,0.15)", fontSize: "12px" }}>·</span>
+          <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)" }}>ANNEX III · POINT 5(B)</span>
         </div>
-        <button onClick={() => setPage("questionnaire")} style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:500, fontSize:"13px", color:NAVY, background:WHITE, border:"none", borderRadius:0, padding:"8px 20px", cursor:"pointer", letterSpacing:"0.02em" }}>
-          Begin Assessment
-        </button>
-      </nav>
-
-      {/* HERO */}
-      <section style={{ background:NAVY, padding:"120px 48px 128px", textAlign:"center" }}>
-        <div style={{ display:"inline-block", fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", letterSpacing:"0.12em", color:"rgba(255,255,255,0.45)", border:"1px solid rgba(255,255,255,0.14)", padding:"5px 14px", marginBottom:"52px" }}>
-          HIGH-RISK AI / ANNEX III POINT 5(B)
-        </div>
-        <h1 style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:400, fontSize:"clamp(40px,5.5vw,72px)", color:WHITE, lineHeight:1.2, letterSpacing:"-0.01em", maxWidth:"860px", margin:"0 auto 36px" }}>
+        <h1 style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "clamp(36px, 5vw, 68px)", color: WHITE, lineHeight: 1.2, letterSpacing: "-0.01em", maxWidth: "820px", margin: "0 auto 32px" }}>
           Compliance, Automated.<br />Five Reports, One Questionnaire.
         </h1>
-        <p style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:300, fontSize:"18px", color:"rgba(255,255,255,0.55)", lineHeight:1.8, maxWidth:"560px", margin:"0 auto 56px" }}>
-          Answer one structured questionnaire about your credit scoring AI system and receive five fully drafted EU AI Act compliance reports in under two seconds.
+        <p style={{ fontFamily: FONT_SANS, fontWeight: 300, fontSize: "17px", color: "rgba(255,255,255,0.52)", lineHeight: 1.8, maxWidth: "520px", margin: "0 auto 52px" }}>
+          Answer one structured questionnaire about your credit scoring AI system and receive five fully drafted compliance reports. Built for providers subject to the EU AI Act Annex III obligations.
         </p>
-        <div style={{ display:"flex", gap:"16px", justifyContent:"center" }}>
-          <button onClick={() => setPage("questionnaire")} style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:500, fontSize:"15px", color:NAVY, background:WHITE, border:"none", borderRadius:0, padding:"14px 36px", cursor:"pointer", letterSpacing:"0.02em" }}>Begin Assessment</button>
-          <button onClick={() => { document.getElementById("coverage-section")?.scrollIntoView({ behavior:"smooth" }); }} style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:400, fontSize:"15px", color:"rgba(255,255,255,0.75)", background:"transparent", border:"1px solid rgba(255,255,255,0.25)", borderRadius:0, padding:"14px 36px", cursor:"pointer", letterSpacing:"0.02em" }}>Learn More</button>
+        <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+          <button onClick={() => setPage("questionnaire")} style={btnPrimary}>Begin Assessment</button>
+          <button onClick={() => document.getElementById("coverage-section")?.scrollIntoView({ behavior: "smooth" })} style={btnGhost}>Learn More</button>
         </div>
       </section>
 
-      {/* ARTICLE DIVIDER */}
-      <div style={{ background:NAVY_LIGHT, borderTop:"1px solid rgba(255,255,255,0.06)", borderBottom:"1px solid rgba(255,255,255,0.06)", padding:"14px 48px", display:"flex", justifyContent:"center", gap:"48px", flexWrap:"wrap" }}>
-        {ARTICLES.map((a) => (
-          <div key={a.id} style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-            <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:a.dot, flexShrink:0 }} />
-            <span style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", letterSpacing:"0.08em", color:"rgba(255,255,255,0.5)" }}>{a.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* COMPLIANCE COVERAGE */}
-      <section id="coverage-section" style={{ background:WHITE, padding:"112px 48px 120px" }}>
-        <div style={{ maxWidth:"900px", margin:"0 auto" }}>
-          <div style={{ textAlign:"center", fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", letterSpacing:"0.14em", color:"rgba(10,14,26,0.4)", marginBottom:"28px" }}>COMPLIANCE COVERAGE</div>
-          <h2 style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:400, fontSize:"clamp(28px,3.5vw,44px)", color:NAVY, lineHeight:1.3, textAlign:"center", marginBottom:"72px", letterSpacing:"-0.01em" }}>Five mandatory assessments under EU AI Act</h2>
+      <section id="coverage-section" style={{ background: WHITE, padding: "104px 56px 112px" }}>
+        <div style={{ maxWidth: "880px", margin: "0 auto" }}>
+          <div style={{ textAlign: "center", fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.16em", color: MUTED, marginBottom: "20px" }}>COMPLIANCE COVERAGE</div>
+          <h2 style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "clamp(26px, 3vw, 40px)", color: TEXT, textAlign: "center", marginBottom: "64px", lineHeight: 1.3, letterSpacing: "-0.01em" }}>
+            Five mandatory assessments under EU AI Act
+          </h2>
           <div>
             {MODULES.map((m, i) => (
-              <div key={m.article} style={{ display:"grid", gridTemplateColumns:"120px 1fr auto", alignItems:"center", gap:"40px", padding:"36px 0", borderTop:i===0?"1px solid rgba(10,14,26,0.1)":"none", borderBottom:"1px solid rgba(10,14,26,0.1)" }}>
-                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"13px", fontWeight:500, color:m.color, letterSpacing:"0.06em", whiteSpace:"nowrap" }}>{m.article}</div>
-                <div style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:500, fontSize:"20px", color:NAVY, lineHeight:1.3 }}>{m.name}</div>
-                <div style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:300, fontSize:"14px", color:"rgba(10,14,26,0.55)", lineHeight:1.7, maxWidth:"340px", textAlign:"right" }}>{m.description}</div>
+              <div key={m.article} className="coverage-row" style={{ display: "grid", gridTemplateColumns: "112px 1fr 1fr", alignItems: "center", gap: "32px", padding: "32px 0", borderTop: i === 0 ? "1px solid rgba(0,0,0,0.08)" : "none", borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: "15px", fontWeight: 500, color: m.color, letterSpacing: "0.02em" }}>{m.article}</span>
+                <div style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "18px", color: TEXT, lineHeight: 1.35 }}>{m.name}</div>
+                <div className="coverage-desc" style={{ fontFamily: FONT_SANS, fontWeight: 300, fontSize: "13px", color: MUTED, lineHeight: 1.7, textAlign: "right" }}>{m.description}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
-      <section style={{ background:GREY, padding:"112px 48px 120px", borderTop:"1px solid rgba(10,14,26,0.07)", borderBottom:"1px solid rgba(10,14,26,0.07)" }}>
-        <div style={{ maxWidth:"1100px", margin:"0 auto" }}>
-          <h2 style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:400, fontSize:"clamp(28px,3.5vw,44px)", color:NAVY, textAlign:"center", marginBottom:"88px", letterSpacing:"-0.01em", lineHeight:1.3 }}>From questionnaire to report in seconds</h2>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"0" }}>
+      <section style={{ background: GREY, padding: "104px 56px 112px", borderTop: "1px solid rgba(0,0,0,0.06)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+        <div style={{ maxWidth: "1060px", margin: "0 auto" }}>
+          <h2 style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "clamp(26px, 3vw, 40px)", color: TEXT, textAlign: "center", marginBottom: "80px", lineHeight: 1.3, letterSpacing: "-0.01em" }}>
+            From questionnaire to report in seconds
+          </h2>
+          <div className="steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
             {STEPS.map((step, i) => (
-              <div key={step.n} style={{ padding:"0 32px", borderRight:i<STEPS.length-1?"1px solid rgba(10,14,26,0.1)":"none" }}>
-                <div style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:600, fontSize:"80px", color:"rgba(10,14,26,0.05)", lineHeight:1, marginBottom:"20px", letterSpacing:"-0.02em", userSelect:"none" }}>{step.n}</div>
-                <div style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:600, fontSize:"16px", color:NAVY, marginBottom:"14px", lineHeight:1.4 }}>{step.title}</div>
-                <div style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:300, fontSize:"14px", color:"rgba(10,14,26,0.55)", lineHeight:1.75 }}>{step.desc}</div>
+              <div key={step.n} style={{ padding: "0 28px", borderRight: i < STEPS.length - 1 ? "1px solid rgba(0,0,0,0.08)" : "none" }}>
+                <div style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "88px", color: "rgba(0,0,0,0.1)", lineHeight: 1, marginBottom: "18px", userSelect: "none" }}>{step.n}</div>
+                <div style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: "15px", color: TEXT, marginBottom: "10px", lineHeight: 1.4 }}>{step.title}</div>
+                <div style={{ fontFamily: FONT_SANS, fontWeight: 300, fontSize: "13px", color: MUTED, lineHeight: 1.75 }}>{step.desc}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* FOOTER CTA */}
-      <section style={{ background:WHITE, padding:"120px 48px 80px", textAlign:"center" }}>
-        <h2 style={{ fontFamily:"'IBM Plex Serif',serif", fontWeight:400, fontSize:"clamp(28px,3.5vw,48px)", color:NAVY, marginBottom:"24px", letterSpacing:"-0.01em", lineHeight:1.25 }}>Ready to assess your system?</h2>
-        <p style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:300, fontSize:"16px", color:"rgba(10,14,26,0.55)", lineHeight:1.75, maxWidth:"480px", margin:"0 auto 48px" }}>
+      <section style={{ background: WHITE, padding: "112px 56px 72px", textAlign: "center" }}>
+        <h2 style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "clamp(28px, 3.5vw, 46px)", color: TEXT, marginBottom: "20px", lineHeight: 1.25, letterSpacing: "-0.01em" }}>Ready to assess your system?</h2>
+        <p style={{ fontFamily: FONT_SANS, fontWeight: 300, fontSize: "15px", color: MUTED, lineHeight: 1.75, maxWidth: "440px", margin: "0 auto 44px" }}>
           Begin the assessment today and receive your five compliance reports within seconds. No account required.
         </p>
-        <button onClick={() => setPage("questionnaire")} style={{ fontFamily:"'IBM Plex Sans',sans-serif", fontWeight:500, fontSize:"15px", color:WHITE, background:NAVY, border:"none", borderRadius:0, padding:"16px 48px", cursor:"pointer", letterSpacing:"0.03em", marginBottom:"64px" }}>
-          Begin Assessment
-        </button>
-        <div style={{ borderTop:"1px solid rgba(10,14,26,0.1)", paddingTop:"32px", display:"flex", justifyContent:"center", alignItems:"center", gap:"32px", flexWrap:"wrap" }}>
-          <span style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", letterSpacing:"0.06em", color:"rgba(10,14,26,0.35)" }}>Regulation (EU) 2024/1689 / Annex III Point 5(b)</span>
-          <span style={{ color:"rgba(10,14,26,0.15)", fontSize:"11px" }}>/</span>
-          <a href="https://github.com/SuhanaSayyad/ai-act-credit-compliance" target="_blank" rel="noopener noreferrer" style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:"11px", letterSpacing:"0.06em", color:"rgba(10,14,26,0.35)", textDecoration:"none", borderBottom:"1px solid rgba(10,14,26,0.2)", paddingBottom:"1px" }}>
+        <button onClick={() => setPage("questionnaire")} style={{ ...btnPrimary, fontSize: "15px", padding: "15px 44px", marginBottom: "56px" }}>Begin Assessment</button>
+        <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: "28px", display: "flex", justifyContent: "center", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.06em", color: "rgba(0,0,0,0.3)" }}>Regulation (EU) 2024/1689 / Annex III Point 5(b)</span>
+          <span style={{ color: "rgba(0,0,0,0.15)", fontSize: "10px" }}>/</span>
+          <a href="https://github.com/SuhanaSayyad/ai-act-credit-compliance" target="_blank" rel="noopener noreferrer" style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.06em", color: BLUE, textDecoration: "none", borderBottom: "1px solid rgba(30,64,175,0.3)", paddingBottom: "1px" }}>
             github.com/SuhanaSayyad/ai-act-credit-compliance
           </a>
         </div>
