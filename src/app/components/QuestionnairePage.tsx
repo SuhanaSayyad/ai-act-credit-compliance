@@ -137,11 +137,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
       explainability_method:        explainMap[answers["4.1"] || "None"] ?? "None",
       model_api_endpoint:           null,
     };
-    console.log("=== PAYLOAD BEING SENT TO BACKEND ===");
-    console.log(JSON.stringify(result, null, 2));
-    console.log("uses_special_category_data:", result.uses_special_category_data);
-    console.log("known_bias_issues:", result.known_bias_issues);
-    console.log("human_oversight_available:", result.human_oversight_available);
     return result;
   }
 
