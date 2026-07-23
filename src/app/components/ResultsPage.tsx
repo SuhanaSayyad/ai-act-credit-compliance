@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ApiResults } from "./App";
+import type { ApiResults } from "../App";
 
 const NAVY   = "#0F1420";
 const WHITE  = "#FFFFFF";
@@ -339,7 +339,7 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
     const url      = URL.createObjectURL(dataBlob);
     const link     = document.createElement("a");
     link.href      = url;
-    link.download  = `${apiResults.systemName}_compliance_report.json`;
+    link.download  = `${apiResults?.systemName ?? "compliance"}_compliance_report.json`;
     link.click();
     URL.revokeObjectURL(url);
     setExportOpen(false);
