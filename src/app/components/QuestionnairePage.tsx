@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ApiResults } from "./App";
+import type { ApiResults } from "../App";
 
 const NAVY   = "#0F1420";
 const WHITE  = "#FFFFFF";
@@ -197,13 +197,14 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
 
       const resultMap: Record<string, any> = {};
       const failed: string[] = [];
-      settled.forEach((result, i) => {
+      settled.forEach((item, i) => {
         const key = endpoints[i].key;
-        if (result.status === "fulfilled") {
-          resultMap[key] = result.value;
+        if (item.status === "fulfilled") {
+          resultMap[key] = (item as PromiseFulfilledResult<any>).value;
         } else {
-          failed.push(`${key}: ${result.reason?.message ?? "unknown error"}`);
-          resultMap[key] = null; // graceful degradation
+          const err = (item as PromiseRejectedResult).reason;
+          failed.push(`${key}: ${err?.message ?? String(err) ?? "unknown error"}`);
+          resultMap[key] = null;
         }
       });
 
