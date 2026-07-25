@@ -40,6 +40,7 @@ const STEPS: Step[] = [
       { id: "1.4", label: "Does the system make fully automated decisions without human review?", type: "toggle", help: "Fully automated decisions trigger Article 22 GDPR safeguards and AI Act oversight requirements under Article 14." },
       { id: "1.5", label: "Is human oversight available to review decisions?",                    type: "toggle", help: "Article 14 requires high-risk systems to be designed so natural persons can effectively oversee, intervene, and override outputs." },
       { id: "1.6", label: "Model API endpoint (optional, BYOM)", type: "text", placeholder: "e.g. https://your-model-api.com/predict", help: "Bring Your Own Model: if your production model exposes a prediction endpoint, enter it here and the XAI and Bias modules will assess your actual model instead of the German Credit reference dataset. Leave blank to use the reference dataset." },
+      { id: "1.7", label: "Estimated users assessed per year", type: "text", placeholder: "e.g. 50000", help: "The approximate number of individuals whose applications this system will process annually. Article 9(2) requires risk management measures to be proportionate to the scale of deployment, so this figure directly affects the risk scaling context shown in the Article 9 report." },
     ],
   },
   {
@@ -119,7 +120,11 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
       organisation_name:            (answers["1.2"] || "").trim() || "Organisation",
       intended_purpose:             "Automated credit scoring for personal loan applications",
       affected_population:          (answers["5.1"] || "").trim() || "Personal loan applicants",
-      estimated_users_per_year:     50000,
+      estimated_users_per_year:     (() => {
+        const raw = (answers["1.7"] || "").replace(/[^0-9]/g, "");
+        const n = parseInt(raw, 10);
+        return Number.isFinite(n) && n > 0 ? n : 50000;
+      })(),
       model_version:                "1.0.0",
       uses_personal_data:           true,
       model_type:                   answers["1.3"] || "Neural Network",
