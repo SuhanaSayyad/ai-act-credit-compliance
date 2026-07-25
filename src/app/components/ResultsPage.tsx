@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ApiResults } from "../App";
 
 const NAVY   = "#0F1420";
@@ -47,19 +47,15 @@ interface Report {
   recommendations: { n: number; text: string }[];
 }
 
-// ── Safe coerce to Sev ──
 function toSev(s: string | undefined): Sev {
   const v = (s || "").toUpperCase();
   if (v === "HIGH" || v === "MEDIUM" || v === "LOW") return v as Sev;
   return "MEDIUM";
 }
 
-// ── Transform API data into Reports ──
 function buildReports(results: ApiResults): Report[] {
   const { fria, cybersecurity, xai, risk, bias } = results;
 
-  // ── Art. 9: Risk ──
-  // API fields: overall_risk_level, overall_risk_score, risk_factors[].risk_name/actual_severity/description/score/mitigation_action
   const riskLevel = toSev(risk?.overall_risk_level);
   const riskFindings: Finding[] = [];
 
@@ -95,8 +91,6 @@ function buildReports(results: ApiResults): Report[] {
         { n: 5, text: "Report risk management activities to the relevant national market surveillance authority as required" },
       ];
 
-  // ── Art. 10(5): Bias ──
-  // API fields: article_10_compliance.bias_detected, threshold_profile.spd_threshold, fairness_analysis.age_based
   const biasDetected = bias?.article_10_compliance?.bias_detected ?? bias?.bias_detected ?? false;
   const spdThreshold = bias?.threshold_profile?.spd_threshold ?? bias?.spd_threshold ?? 0.04;
   const biasSev: Sev = biasDetected ? "HIGH" : "LOW";
@@ -138,8 +132,6 @@ function buildReports(results: ApiResults): Report[] {
         { n: 3, text: "Document bias testing methodology and results in the technical file as required by Article 11." },
       ];
 
-  // ── Art. 13: XAI ──
-  // API fields: compliance_status.status, method_used, explainability_method, top_features
   const xaiStatusStr  = xai?.compliance_status?.status ?? xai?.compliance_status ?? "UNKNOWN";
   const xaiCompliant  = xaiStatusStr === "COMPLIANT";
   const xaiSev: Sev   = xaiCompliant ? "LOW" : "HIGH";
@@ -172,8 +164,6 @@ function buildReports(results: ApiResults): Report[] {
         { n: 3, text: "Establish a process for affected individuals to request and receive explanations within a reasonable timeframe." },
       ];
 
-  // ── Art. 15: Cybersecurity ──
-  // API fields: overall_security_risk, threats_identified[].threat_name/severity/description/applicable/graph_inferred, knowledge_graph_traversal.graph_inferred_threats
   const cyberSev = toSev(cybersecurity?.overall_security_risk);
   const cyberFindings: Finding[] = [];
   const graphInferredList = cybersecurity?.knowledge_graph_traversal?.graph_inferred_threats ?? [];
@@ -213,8 +203,6 @@ function buildReports(results: ApiResults): Report[] {
         { n: 3, text: "Conduct an annual independent security audit as required by Article 15. Next scheduled: within 12 months of deployment." },
       ];
 
-  // ── Art. 27: FRIA ──
-  // API fields: overall_risk_level, rights_assessed[].right/article/impact_level/impact_justification/mitigation
   const friaLevel = toSev(fria?.overall_risk_level ?? fria?.overall_fria_level);
   const friaFindings: Finding[] = [];
   const rights = fria?.rights_assessed ?? fria?.fundamental_rights ?? [];
@@ -258,8 +246,6 @@ function buildReports(results: ApiResults): Report[] {
   ];
 }
 
-
-// ── SevChip ──
 function SevChip({ status }: { status: Sev }) {
   const s = SEV[status];
   return (
@@ -269,7 +255,6 @@ function SevChip({ status }: { status: Sev }) {
   );
 }
 
-// ── FindingCard ──
 function FindingCard({ finding, defaultOpen }: { finding: Finding; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const s = SEV[finding.status];
@@ -303,7 +288,6 @@ function FindingCard({ finding, defaultOpen }: { finding: Finding; defaultOpen: 
   );
 }
 
-// ── Props ──
 interface Props {
   apiResults: ApiResults | null;
   onBack:   () => void;
@@ -313,8 +297,14 @@ interface Props {
 export function ResultsPage({ apiResults, onBack, onHome }: Props) {
   const [activeTab,  setActiveTab]  = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
+  const [printMode,  setPrintMode]  = useState(false);
 
-  // ── Empty state ──
+  useEffect(() => {
+    function onAfterPrint() { setPrintMode(false); }
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => window.removeEventListener("afterprint", onAfterPrint);
+  }, []);
+
   if (!apiResults) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: GREY }}>
@@ -333,22 +323,118 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
   const counts  = { HIGH: 0, MEDIUM: 0, LOW: 0 } as Record<Sev, number>;
   REPORTS.forEach(r => { counts[r.status]++; });
 
-  function handleExport(format: string) {
-    const dataStr  = JSON.stringify(apiResults, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
+  function downloadBlob(content: string, mime: string, filename: string) {
+    const dataBlob = new Blob([content], { type: mime });
     const url      = URL.createObjectURL(dataBlob);
     const link     = document.createElement("a");
     link.href      = url;
-    link.download  = `${apiResults?.systemName ?? "compliance"}_compliance_report.json`;
+    link.download  = filename;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function csvEscape(val: string): string {
+    const s = String(val ?? "");
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  }
+
+  function handleExportJSON() {
+    downloadBlob(
+      JSON.stringify(apiResults, null, 2),
+      "application/json",
+      `${apiResults?.systemName ?? "compliance"}_compliance_report.json`
+    );
     setExportOpen(false);
+  }
+
+  function handleExportCSV() {
+    if (!apiResults) return;
+    const rows: string[] = [];
+    rows.push(["Article", "Overall Status", "Row Type", "ID", "Name", "Status", "Description", "Citation", "Mitigation"].map(csvEscape).join(","));
+
+    REPORTS.forEach(r => {
+      r.findings.forEach(f => {
+        rows.push([
+          r.article, r.status, "Finding", f.id, f.name, f.status, f.description, f.citation, f.mitigation
+        ].map(csvEscape).join(","));
+      });
+      r.recommendations.forEach(rec => {
+        rows.push([
+          r.article, r.status, "Recommendation", String(rec.n), "", "", rec.text, "", ""
+        ].map(csvEscape).join(","));
+      });
+    });
+
+    downloadBlob(rows.join("\r\n"), "text/csv;charset=utf-8;",
+      `${apiResults.systemName}_compliance_report.csv`);
+    setExportOpen(false);
+  }
+
+  function handleExportPDF() {
+    setExportOpen(false);
+    setPrintMode(true);
+    setTimeout(() => window.print(), 150);
   }
 
   return (
     <div style={{ minHeight: "100vh", background: GREY, fontFamily: FONT_SANS }} onClick={() => setExportOpen(false)}>
 
-      {/* ── TOP BAR ── */}
+      <style>{`
+        @media print {
+          .screen-only { display: none !important; }
+          .print-only  { display: block !important; }
+          body { background: white !important; }
+        }
+        @media screen {
+          .print-only { display: none !important; }
+        }
+      `}</style>
+
+      <div className="print-only" style={{ padding: "24px", background: WHITE }}>
+        <div style={{ marginBottom: "24px", borderBottom: `2px solid ${NAVY}`, paddingBottom: "16px" }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.14em", color: MUTED }}>EU AI ACT COMPLIANCE ASSESSMENT</div>
+          <h1 style={{ fontFamily: FONT_SERIF, fontSize: "26px", color: TEXT, margin: "6px 0" }}>{apiResults.systemName}</h1>
+          <div style={{ fontFamily: FONT_SANS, fontSize: "13px", color: MUTED }}>{apiResults.organisationName}  |  Generated {new Date().toLocaleDateString()}</div>
+        </div>
+        {REPORTS.map(r => {
+          const artColor = ARTICLE_COLOR[r.article] ?? BLUE;
+          return (
+            <div key={r.tab} style={{ marginBottom: "36px", pageBreakInside: "avoid" as const, breakInside: "avoid" as const }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: "11px", color: artColor, fontWeight: 700 }}>{r.article}</span>
+                <SevChip status={r.status} />
+              </div>
+              <h2 style={{ fontFamily: FONT_SERIF, fontSize: "18px", color: TEXT, margin: "0 0 6px" }}>{r.name}</h2>
+              <p style={{ fontFamily: FONT_SANS, fontSize: "12px", color: MUTED, margin: "0 0 12px" }}>{r.description}</p>
+
+              {r.findings.map(f => (
+                <div key={f.id} style={{ borderTop: `1px solid ${SUBTLE}`, padding: "10px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: "12.5px", color: TEXT }}>{f.id}  {f.name}</span>
+                    <SevChip status={f.status} />
+                  </div>
+                  <p style={{ fontFamily: FONT_SANS, fontSize: "11.5px", color: TEXT, margin: "4px 0" }}>{f.description}</p>
+                  <p style={{ fontFamily: FONT_SANS, fontSize: "10.5px", color: MUTED, margin: "2px 0" }}><b>Citation:</b> {f.citation}</p>
+                  <p style={{ fontFamily: FONT_SANS, fontSize: "10.5px", color: MUTED, margin: "2px 0" }}><b>Mitigation:</b> {f.mitigation}</p>
+                </div>
+              ))}
+
+              <div style={{ marginTop: "10px" }}>
+                <div style={{ fontFamily: FONT_MONO, fontSize: "9.5px", color: MUTED, marginBottom: "6px" }}>RECOMMENDATIONS</div>
+                {r.recommendations.map(rec => (
+                  <p key={rec.n} style={{ fontFamily: FONT_SANS, fontSize: "11px", color: TEXT, margin: "3px 0" }}>{rec.n}. {rec.text}</p>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="screen-only">
+
       <div style={{ background: NAVY, padding: "0 48px", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: "1240px", margin: "0 auto", height: "48px" }}>
           <button onClick={onHome} style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.4)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", padding: 0 }}>
@@ -360,7 +446,6 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
         </div>
       </div>
 
-      {/* ── HERO HEADER ── */}
       <div style={{ background: WHITE, borderBottom: `1px solid ${HAIR}` }}>
         <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "40px 48px 36px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "24px", flexWrap: "wrap" as const }}>
           <div>
@@ -390,13 +475,17 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
               </button>
               {exportOpen && (
                 <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: WHITE, border: `1px solid ${SUBTLE}`, borderRadius: "4px", minWidth: "230px", zIndex: 100, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>
-                  {["Export all sections (JSON)"].map(label => (
-                    <button key={label} onClick={() => handleExport("json")}
+                  {[
+                    { label: "Export as PDF (print)", onClick: handleExportPDF },
+                    { label: "Export as CSV",         onClick: handleExportCSV },
+                    { label: "Export as JSON",         onClick: handleExportJSON },
+                  ].map(opt => (
+                    <button key={opt.label} onClick={opt.onClick}
                       style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", fontFamily: FONT_SANS, fontWeight: 400, fontSize: "13px", color: TEXT, background: "none", border: "none", padding: "12px 16px", cursor: "pointer", textAlign: "left" as const }}
                       onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = GREY; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "none"; }}>
                       <span style={{ fontFamily: FONT_MONO, fontSize: "11px", color: BLUE }}>↓</span>
-                      {label}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
@@ -406,7 +495,6 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
         </div>
       </div>
 
-      {/* ── FAILED MODULES BANNER ── */}
       {apiResults.failedModules && apiResults.failedModules.length > 0 && (
         <div style={{ background: "rgba(217,119,6,0.08)", borderBottom: "1px solid rgba(217,119,6,0.2)", padding: "10px 48px" }}>
           <div style={{ maxWidth: "1240px", margin: "0 auto", display: "flex", alignItems: "center", gap: "10px" }}>
@@ -418,10 +506,8 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
         </div>
       )}
 
-      {/* ── TWO-COLUMN BODY ── */}
       <div style={{ display: "flex", alignItems: "flex-start", maxWidth: "1240px", margin: "0 auto" }}>
 
-        {/* LEFT RAIL */}
         <nav style={{ width: "300px", flexShrink: 0, padding: "36px 0 36px 48px", position: "sticky", top: "48px", alignSelf: "flex-start" }}>
           <div style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.14em", color: MUTED, padding: "0 0 14px 4px" }}>SECTIONS</div>
           <div>
@@ -444,7 +530,6 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
           </div>
         </nav>
 
-        {/* RIGHT PANE */}
         <main style={{ flex: 1, minWidth: 0, background: WHITE, borderLeft: `1px solid ${SUBTLE}`, minHeight: "calc(100vh - 48px)", padding: "44px 56px 64px" }}>
 
           <div style={{ marginBottom: "32px", paddingBottom: "24px", borderBottom: `1px solid ${HAIR}` }}>
@@ -489,6 +574,7 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
             </div>
           </div>
         </main>
+      </div>
       </div>
     </div>
   );

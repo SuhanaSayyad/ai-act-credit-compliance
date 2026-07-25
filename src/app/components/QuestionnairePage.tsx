@@ -39,6 +39,7 @@ const STEPS: Step[] = [
         help: "The underlying algorithm class. This influences transparency obligations under Article 13." },
       { id: "1.4", label: "Does the system make fully automated decisions without human review?", type: "toggle", help: "Fully automated decisions trigger Article 22 GDPR safeguards and AI Act oversight requirements under Article 14." },
       { id: "1.5", label: "Is human oversight available to review decisions?",                    type: "toggle", help: "Article 14 requires high-risk systems to be designed so natural persons can effectively oversee, intervene, and override outputs." },
+      { id: "1.6", label: "Model API endpoint (optional, BYOM)", type: "text", placeholder: "e.g. https://your-model-api.com/predict", help: "Bring Your Own Model: if your production model exposes a prediction endpoint, enter it here and the XAI and Bias modules will assess your actual model instead of the German Credit reference dataset. Leave blank to use the reference dataset." },
     ],
   },
   {
@@ -135,7 +136,7 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
       known_bias_issues:            toggleValues["3.5"] ?? false,
       deployment_sector:            "Banking and Financial Services",
       explainability_method:        explainMap[answers["4.1"] || "None"] ?? "None",
-      model_api_endpoint:           null,
+      model_api_endpoint:           (answers["1.6"] || "").trim() || null,
     };
     return result;
   }
@@ -172,21 +173,17 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
         { key: "bias",          url: `${BASE_URL}/api/bias/assess` },
       ];
 
-      // Try each endpoint independently - with slash, without slash, both
       async function tryEndpoint(key: string, url: string): Promise<any> {
         const opts = {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         };
-        // Try with trailing slash
         const r1 = await fetch(url, opts);
         if (r1.ok) return r1.json();
-        // Try without trailing slash
         const urlNoSlash = url.endsWith("/") ? url.slice(0, -1) : url + "/";
         const r2 = await fetch(urlNoSlash, opts);
         if (r2.ok) return r2.json();
-        // Both failed - throw with detail from whichever gave more info
         const errText = await (r1.status === 404 ? r2 : r1).text().catch(() => "No response body");
         throw new Error(`${key}: ${r1.status} / ${r2.status} - ${errText}`);
       }
@@ -210,7 +207,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
 
       clearInterval(ticker);
 
-      // Only hard-fail if ALL 5 endpoints failed
       if (failed.length === 5) {
         throw new Error("All compliance modules failed to respond:\n" + failed.join("\n"));
       }
@@ -260,7 +256,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
     caretColor: accentColor, borderRadius: 0,
   };
 
-  // ── LOADING SCREEN ──
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: NAVY, flexDirection: "column", gap: "28px" }}>
@@ -286,7 +281,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
     );
   }
 
-  // ── ERROR SCREEN ──
   if (error) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: GREY, padding: "40px" }}>
@@ -314,7 +308,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: FONT_SANS }}>
-      {/* ── SIDEBAR ── */}
       <aside style={{ width: "288px", minWidth: "288px", background: NAVY, display: "flex", flexDirection: "column", padding: "36px 28px", position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
         <button onClick={onBack} style={{ fontFamily: FONT_SANS, fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, marginBottom: "40px", display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ fontSize: "14px" }}>&#8592;</span> Back to overview
@@ -358,12 +351,10 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
         </div>
       </aside>
 
-      {/* ── MAIN ── */}
       <main style={{ flex: 1, background: GREY, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "52px 52px 0" }}>
           <div style={{ background: WHITE, width: "100%", maxWidth: "680px", border: `1px solid ${SUBTLE}`, borderRadius: "4px", overflow: "hidden" }}>
 
-            {/* CARD HEADER */}
             <div style={{ padding: "40px 48px 0" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -389,7 +380,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
 
             <div style={{ height: "1px", background: SUBTLE }} />
 
-            {/* FIELDS */}
             <div style={{ padding: "36px 48px 0" }}>
               {step.fields.map((field, fi) => (
                 <div key={field.id} style={{ marginBottom: fi < step.fields.length - 1 ? "36px" : "44px" }}>
@@ -447,7 +437,6 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
               ))}
             </div>
 
-            {/* CARD FOOTER */}
             <div style={{ background: GREY, borderTop: `1px solid ${SUBTLE}`, padding: "20px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
               <button onClick={handlePrevious} style={{ fontFamily: FONT_SANS, fontWeight: 500, fontSize: "13px", color: MUTED, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", padding: 0, transition: "color 0.15s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = TEXT; }}
