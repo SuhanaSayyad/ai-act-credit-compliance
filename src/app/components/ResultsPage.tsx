@@ -36,6 +36,7 @@ interface Finding {
   description: string;
   citation: string;
   mitigation: string;
+  confidence?: { score: number; label: string };
 }
 interface Report {
   tab: number;
@@ -45,6 +46,8 @@ interface Report {
   status: Sev;
   findings: Finding[];
   recommendations: { n: number; text: string }[];
+  overallConfidence?: { score: number; label: string };
+  contextNote?: string;
 }
 
 function toSev(s: string | undefined): Sev {
@@ -69,6 +72,7 @@ function buildReports(results: ApiResults): Report[] {
         description: f.description ?? f.detail ?? "Risk factor identified.",
         citation:    `Article 9, EU Regulation 2024/1689`,
         mitigation:  f.mitigation_action ?? f.mitigation ?? "Implement risk management controls and document remediation steps.",
+        confidence:  f.confidence ? { score: f.confidence.score, label: f.confidence.label } : undefined,
       });
     });
   }
@@ -181,6 +185,7 @@ function buildReports(results: ApiResults): Report[] {
         description: t.description ?? `${t.threat_name ?? "Threat"} identified.${t.graph_inferred ? " (graph-inferred from system profile)" : ""}`,
         citation:    `Article 15, EU Regulation 2024/1689 – Cybersecurity and robustness. MITRE ATLAS: ${t.governed_by ?? t.threat_id ?? "AML.T"}`,
         mitigation:  t.mitigation ?? t.control ?? "Implement appropriate technical controls and document security posture.",
+        confidence:  t.confidence ? { score: t.confidence.score, label: t.confidence.label } : undefined,
       });
     });
   }
@@ -216,6 +221,7 @@ function buildReports(results: ApiResults): Report[] {
         description: r.impact_justification ?? r.reason ?? r.assessment ?? r.description ?? `Impact level: ${r.impact_level ?? "assessed"}.`,
         citation:    r.article ?? `Article 27(1)(c), EU Regulation 2024/1689`,
         mitigation:  r.mitigation ?? r.measure ?? "Implement appropriate safeguards and document in the FRIA.",
+        confidence:  r.confidence ? { score: r.confidence.score, label: r.confidence.label } : undefined,
       });
     });
   }
@@ -238,11 +244,11 @@ function buildReports(results: ApiResults): Report[] {
       ];
 
   return [
-    { tab: 1, article: "Art. 9",     name: "Risk Management System",               description: "Evaluation of continuous risk identification, analysis, and mitigation across the AI system lifecycle.", status: riskLevel,  findings: riskFindings,  recommendations: riskRecs },
+    { tab: 1, article: "Art. 9",     name: "Risk Management System",               description: "Evaluation of continuous risk identification, analysis, and mitigation across the AI system lifecycle.", status: riskLevel,  findings: riskFindings,  recommendations: riskRecs, overallConfidence: risk?.overall_risk_confidence ? { score: risk.overall_risk_confidence.score, label: risk.overall_risk_confidence.label } : undefined, contextNote: risk?.deployment_context?.scale_note },
     { tab: 2, article: "Art. 10(5)", name: "Bias and Fairness Assessment",          description: "Statistical evaluation of training data and model outputs for discriminatory patterns affecting protected characteristics.", status: biasSev,   findings: biasFindings,  recommendations: biasRecs },
     { tab: 3, article: "Art. 13",    name: "Transparency and Explainability",       description: "Assessment of explanation quality, individual decision transparency, and disclosure obligations to affected individuals.", status: xaiSev,    findings: xaiFindings,   recommendations: xaiRecs },
-    { tab: 4, article: "Art. 15",    name: "Cybersecurity and Robustness",          description: "Resilience evaluation against adversarial inputs, data poisoning, model extraction, and other MITRE ATLAS threat categories.", status: cyberSev,  findings: cyberFindings, recommendations: cyberRecs },
-    { tab: 5, article: "Art. 27",    name: "Fundamental Rights Impact Assessment",  description: "Structured evaluation of material impacts on autonomy, dignity, equality, and individual rights guaranteed under the EU Charter.", status: friaLevel, findings: friaFindings,  recommendations: friaRecs },
+    { tab: 4, article: "Art. 15",    name: "Cybersecurity and Robustness",          description: "Resilience evaluation against adversarial inputs, data poisoning, model extraction, and other MITRE ATLAS threat categories.", status: cyberSev,  findings: cyberFindings, recommendations: cyberRecs, overallConfidence: cybersecurity?.overall_security_confidence ? { score: cybersecurity.overall_security_confidence.score, label: cybersecurity.overall_security_confidence.label } : undefined },
+    { tab: 5, article: "Art. 27",    name: "Fundamental Rights Impact Assessment",  description: "Structured evaluation of material impacts on autonomy, dignity, equality, and individual rights guaranteed under the EU Charter.", status: friaLevel, findings: friaFindings,  recommendations: friaRecs, overallConfidence: fria?.overall_confidence ? { score: fria.overall_confidence.score, label: fria.overall_confidence.label } : undefined, contextNote: fria?.affected_population_context?.vulnerable_groups_detected ? `Vulnerable groups detected in affected population: ${fria.affected_population_context.affected_population}` : undefined },
   ];
 }
 
@@ -265,6 +271,11 @@ function FindingCard({ finding, defaultOpen }: { finding: Finding; defaultOpen: 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: "14px", color: TEXT, flex: 1, lineHeight: 1.4 }}>{finding.name}</span>
+            {finding.confidence && (
+              <span style={{ fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 500, color: MUTED, background: "rgba(0,0,0,0.04)", padding: "3px 7px", borderRadius: "3px", whiteSpace: "nowrap" as const }}>
+                {finding.confidence.score}% confidence
+              </span>
+            )}
             <SevChip status={finding.status} />
           </div>
         </div>
@@ -538,7 +549,17 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
               <span style={{ color: "rgba(0,0,0,0.18)", fontSize: "10px" }}>·</span>
               <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", color: MUTED }}>SECTION {report.tab} OF {REPORTS.length}</span>
               <SevChip status={report.status} />
+              {report.overallConfidence && (
+                <span style={{ fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 500, color: MUTED, background: "rgba(0,0,0,0.04)", padding: "3px 8px", borderRadius: "3px" }}>
+                  {report.overallConfidence.score}% overall confidence
+                </span>
+              )}
             </div>
+            {report.contextNote && (
+              <p style={{ fontFamily: FONT_SANS, fontWeight: 400, fontSize: "12.5px", color: articleColor, lineHeight: 1.6, margin: "0 0 10px", padding: "8px 12px", background: `${articleColor}0D`, borderRadius: "4px", maxWidth: "620px" }}>
+                {report.contextNote}
+              </p>
+            )}
             <h2 style={{ fontFamily: FONT_SERIF, fontWeight: 400, fontSize: "28px", color: TEXT, lineHeight: 1.2, margin: "0 0 12px", letterSpacing: "-0.01em" }}>{report.name}</h2>
             <p style={{ fontFamily: FONT_SANS, fontWeight: 400, fontSize: "14px", color: MUTED, lineHeight: 1.7, margin: 0, maxWidth: "620px" }}>{report.description}</p>
           </div>
