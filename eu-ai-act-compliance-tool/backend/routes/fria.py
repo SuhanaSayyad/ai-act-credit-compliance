@@ -1,6 +1,32 @@
 from fastapi import APIRouter
 from models import CreditScoringSystem
 from database import get_driver
+import re
+
+router = APIRouter()
+
+VULNERABLE_KEYWORDS = [
+    "minority", "ethnic", "elderly", "over 60", "over 65", "disab",
+    "low-income", "low income", "vulnerable", "migrant", "refugee", "unemployed"
+]
+
+def _detect_vulnerable_population(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    return any(kw in t for kw in VULNERABLE_KEYWORDS)
+
+def _parse_retention_months(text: str) -> int:
+    if not text:
+        return 0
+    t = text.lower()
+    m = re.search(r'(\d+)\s*(year|yr)', t)
+    if m:
+        return int(m.group(1)) * 12
+    m = re.search(r'(\d+)\s*month', t)
+    if m:
+        return int(m.group(1))
+    return 0
 
 def compute_right_confidence(right_name: str, system) -> dict:
     criteria_map = {
@@ -73,8 +99,6 @@ def compute_right_confidence(right_name: str, system) -> dict:
         "note": "Confidence reflects the proportion of applicable risk criteria directly evidenced by system characteristics. Low confidence indicates the assessment is based on fewer confirmed factors."
     }
 
-router = APIRouter()
-
 @router.post("/assess")
 async def assess_fria(system: CreditScoringSystem):
     try:
@@ -112,6 +136,9 @@ async def assess_fria(system: CreditScoringSystem):
             )
             obligations_data = [dict(r) for r in obligations_result]
 
+        vulnerable_flag = _detect_vulnerable_population(system.affected_population)
+        retention_months = _parse_retention_months(system.data_retention_period)
+
         rights_assessed = []
         for right in rights:
             impact = "LOW"
@@ -120,7 +147,11 @@ async def assess_fria(system: CreditScoringSystem):
             name = right["name"]
 
             if name == "Right to Privacy":
-                if system.uses_personal_data and not system.audit_logging_enabled:
+                if system.uses_personal_data and not system.audit_logging_enabled and retention_months >= 84:
+                    impact = "HIGH"
+                    justification = f"Personal data processed without audit logging, combined with a declared retention period ({system.data_retention_period}) that exceeds common GDPR Article 5(1)(e) data minimisation guidance, creates a significant accountability and proportionality gap"
+                    mitigation = "Implement tamper-evident audit logging and reduce the retention period to what is strictly necessary for the stated purpose"
+                elif system.uses_personal_data and not system.audit_logging_enabled:
                     impact = "HIGH"
                     justification = "Personal data processed without audit logging creates accountability gaps under Article 7 EU Charter and GDPR Article 5(1)(f)"
                     mitigation = "Implement tamper-evident audit logging and data minimisation practices"
@@ -134,7 +165,11 @@ async def assess_fria(system: CreditScoringSystem):
                     mitigation = "Maintain current data minimisation approach"
 
             elif name == "Right to Non-Discrimination":
-                if system.known_bias_issues:
+                if system.known_bias_issues and vulnerable_flag:
+                    impact = "HIGH"
+                    justification = f"Documented bias creates direct discrimination risk under Article 21 EU Charter, with heightened concern given the affected population includes groups that may warrant additional protection ({system.affected_population})"
+                    mitigation = "Conduct immediate independent bias audit before any deployment, with specific attention to outcomes for the vulnerable groups identified"
+                elif system.known_bias_issues:
                     impact = "HIGH"
                     justification = "Documented bias creates direct discrimination risk under Article 21 EU Charter"
                     mitigation = "Conduct immediate independent bias audit before any deployment"
@@ -187,7 +222,11 @@ async def assess_fria(system: CreditScoringSystem):
                     mitigation = "Publish a clear accessible complaints procedure"
 
             elif name == "Right to Equal Treatment":
-                if system.known_bias_issues:
+                if system.known_bias_issues and vulnerable_flag:
+                    impact = "HIGH"
+                    justification = f"Known bias directly compromises equal treatment under Article 20 EU Charter, with specific risk to the declared affected population ({system.affected_population})"
+                    mitigation = "Address all bias before deployment with disaggregated monitoring for the identified vulnerable groups"
+                elif system.known_bias_issues:
                     impact = "HIGH"
                     justification = "Known bias directly compromises equal treatment under Article 20 EU Charter"
                     mitigation = "Address all bias before deployment and implement continuous monitoring"
@@ -248,6 +287,10 @@ async def assess_fria(system: CreditScoringSystem):
             recommendations.insert(0, "URGENT: Implement SHAP or LIME explainability before deployment")
         if system.known_bias_issues:
             recommendations.insert(0, "URGENT: Resolve all known bias issues before deployment")
+        if vulnerable_flag:
+            recommendations.insert(0, f"Engage representatives of the affected population ({system.affected_population}) in the FRIA stakeholder consultation required by Article 27(2)")
+        if retention_months >= 84:
+            recommendations.append(f"Review the {system.data_retention_period} retention period against GDPR Article 5(1)(e) data minimisation requirements")
 
         obligations = [
             {"article": "Article 27(1)", "requirement": "Conduct FRIA before putting high-risk AI into service"},
@@ -268,6 +311,12 @@ async def assess_fria(system: CreditScoringSystem):
                 "basis": f"{sum(1 for r in rights_assessed if r['impact_level'] in ['HIGH', 'MEDIUM'])} of {len(rights_assessed)} rights flagged as requiring attention",
                 "note": "Overall confidence reflects the average certainty across all fundamental rights assessments based on confirmed system characteristics."
             },
+            "affected_population_context": {
+                "affected_population": system.affected_population,
+                "vulnerable_groups_detected": vulnerable_flag,
+                "data_retention_period": system.data_retention_period,
+                "retention_months_parsed": retention_months
+            },
             "knowledge_graph_traversal": {
                 "method": "Multi-hop Cypher traversal: LegalArticle -[REQUIRES_ASSESSMENT_OF]-> FundamentalRight",
                 "rights_traversed": len(rights_assessed),
@@ -276,6 +325,12 @@ async def assess_fria(system: CreditScoringSystem):
             },
             "rights_assessed": rights_assessed,
             "obligations": obligations,
+            "report_metadata": {
+                "organisation_name": system.organisation_name,
+                "intended_purpose": system.intended_purpose,
+                "model_version": system.model_version,
+                "deployment_sector": system.deployment_sector
+            },
             "recommendations": recommendations
         }
 

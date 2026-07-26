@@ -1,14 +1,38 @@
 from fastapi import APIRouter
 from models import CreditScoringSystem
 from database import get_driver
+import re
 
 router = APIRouter()
 
+def _parse_retention_months(text: str) -> int:
+    if not text:
+        return 0
+    t = text.lower()
+    m = re.search(r'(\d+)\s*(year|yr)', t)
+    if m:
+        return int(m.group(1)) * 12
+    m = re.search(r'(\d+)\s*month', t)
+    if m:
+        return int(m.group(1))
+    return 0
+
+def _detect_alternative_data(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    return any(kw in t for kw in ["social media", "mobile", "browsing", "app usage", "device data", "location"])
+
+def _scale_context(n: int) -> str:
+    if n >= 50000:
+        return f"Large-scale deployment ({n:,} users/year) elevates societal impact under the Article 9(2) proportionality principle."
+    elif n >= 10000:
+        return f"Medium-scale deployment ({n:,} users/year)."
+    elif n > 0:
+        return f"Limited-scale deployment ({n:,} users/year)."
+    return "Deployment scale not specified."
+
 def _compute_risk_confidence(code: str, score: int, system) -> dict:
-    """
-    Confidence for each risk factor based on how directly the questionnaire
-    answers confirm the risk. Higher score AND more direct evidence = higher confidence.
-    """
     direct_evidence = {
         "RISK_AUTOMATION":    system.automated_decision_making and not system.human_oversight_available,
         "RISK_SPECIAL_DATA":  system.uses_special_category_data,
@@ -27,7 +51,7 @@ def _compute_risk_confidence(code: str, score: int, system) -> dict:
     }
     primary = direct_evidence.get(code, False)
     secondary = secondary_evidence.get(code, False)
-    
+
     if primary and secondary:
         conf_score = 90
         basis = "Both primary and secondary risk indicators confirmed"
@@ -49,8 +73,6 @@ def _compute_risk_confidence(code: str, score: int, system) -> dict:
         "note": "Risk confidence reflects how directly the system's declared characteristics confirm this specific risk factor."
     }
 
-
-
 @router.post("/assess")
 async def assess_risk(system: CreditScoringSystem):
     try:
@@ -60,6 +82,8 @@ async def assess_risk(system: CreditScoringSystem):
             risk_factors_db = [record["rf"] for record in result]
 
         risk_factors = []
+        alt_data_flag = _detect_alternative_data(system.data_sources)
+        retention_months = _parse_retention_months(system.data_retention_period)
 
         for rf in risk_factors_db:
             code = rf["code"]
@@ -86,7 +110,12 @@ async def assess_risk(system: CreditScoringSystem):
                     mitigation_action = "Maintain current human oversight procedures and document them formally for regulatory inspection"
 
             elif code == "RISK_SPECIAL_DATA":
-                if system.uses_special_category_data:
+                if system.uses_special_category_data and alt_data_flag:
+                    score = 9
+                    severity = "HIGH"
+                    mitigation_status = "REQUIRED"
+                    mitigation_action = "Apply Article 10(5) safeguards: pseudonymisation, strict access controls, and deletion after bias correction. Non-traditional data sources (e.g. social media, mobile usage) increase proxy-discrimination risk for special category data and require additional scrutiny of derived features."
+                elif system.uses_special_category_data:
                     score = 7
                     severity = "HIGH"
                     mitigation_status = "REQUIRED"
@@ -139,7 +168,12 @@ async def assess_risk(system: CreditScoringSystem):
                     mitigation_action = "Implement ongoing bias monitoring in production to detect and address emerging fairness issues"
 
             elif code == "RISK_NO_AUDIT":
-                if not system.audit_logging_enabled:
+                if not system.audit_logging_enabled and retention_months >= 84:
+                    score = 7
+                    severity = "HIGH"
+                    mitigation_status = "REQUIRED"
+                    mitigation_action = f"Implement tamper-evident audit logging before deployment as required by Article 12. The declared retention period ({system.data_retention_period or 'unspecified'}) exceeds common data minimisation guidance under GDPR Article 5(1)(e), making an auditable trail of processing decisions especially important."
+                elif not system.audit_logging_enabled:
                     score = 6
                     severity = "HIGH"
                     mitigation_status = "REQUIRED"
@@ -175,6 +209,18 @@ async def assess_risk(system: CreditScoringSystem):
 
         outstanding = sum(1 for rf in risk_factors if rf["mitigation_status"] == "REQUIRED")
 
+        recommendations = [
+            "Address all HIGH severity risks before deployment under Article 9",
+            "Assign a named responsible person for each outstanding mitigation action with a completion deadline",
+            "Document the risk management system formally including all identified risks and mitigations",
+            "Establish a schedule for regular risk re-assessment at least annually",
+            "Report risk management activities to the relevant national market surveillance authority as required"
+        ]
+        if system.estimated_users_per_year >= 50000:
+            recommendations.insert(0, "Given the large deployment scale, prioritise proportionate risk controls under Article 9(2) and consider more frequent re-assessment than the annual minimum")
+        if alt_data_flag and system.uses_special_category_data:
+            recommendations.insert(0, "Audit non-traditional data sources (social media, mobile usage) for proxy variables correlated with special category data")
+
         return {
             "system_name": system.system_name,
             "article": "Article 9 - EU AI Act",
@@ -187,6 +233,14 @@ async def assess_risk(system: CreditScoringSystem):
                 "medium_risks": medium_risks,
                 "low_risks": low_risks
             },
+            "deployment_context": {
+                "estimated_users_per_year": system.estimated_users_per_year,
+                "scale_note": _scale_context(system.estimated_users_per_year),
+                "data_sources": system.data_sources,
+                "alternative_data_detected": alt_data_flag,
+                "data_retention_period": system.data_retention_period,
+                "retention_months_parsed": retention_months
+            },
             "overall_risk_confidence": {
                 "score": round(sum(rf["confidence"]["score"] for rf in risk_factors) / len(risk_factors)) if risk_factors else 50,
                 "label": "HIGH CONFIDENCE" if round(sum(rf["confidence"]["score"] for rf in risk_factors) / len(risk_factors)) >= 75 else "MODERATE CONFIDENCE",
@@ -198,13 +252,13 @@ async def assess_risk(system: CreditScoringSystem):
                 "outstanding_actions": outstanding,
                 "next_review": "Before deployment and at least annually thereafter or after any significant system change"
             },
-            "recommendations": [
-                "Address all HIGH severity risks before deployment under Article 9",
-                "Assign a named responsible person for each outstanding mitigation action with a completion deadline",
-                "Document the risk management system formally including all identified risks and mitigations",
-                "Establish a schedule for regular risk re-assessment at least annually",
-                "Report risk management activities to the relevant national market surveillance authority as required"
-            ]
+            "report_metadata": {
+                "organisation_name": system.organisation_name,
+                "intended_purpose": system.intended_purpose,
+                "model_version": system.model_version,
+                "deployment_sector": system.deployment_sector
+            },
+            "recommendations": recommendations
         }
 
     except Exception as e:
