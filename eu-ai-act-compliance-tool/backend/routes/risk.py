@@ -36,7 +36,7 @@ def _compute_risk_confidence(code: str, score: int, system) -> dict:
     direct_evidence = {
         "RISK_AUTOMATION":    system.automated_decision_making and not system.human_oversight_available,
         "RISK_SPECIAL_DATA":  system.uses_special_category_data,
-        "RISK_EXPLAINABILITY": not bool((system.explainability_method or "").strip()),
+        "RISK_EXPLAINABILITY": (lambda em: (em or "").strip().lower() == "" or any((em or "").strip().lower().startswith(n) for n in ["none implemented", "not implemented", "not applicable", "n/a", "na", "none", "no"]))(system.explainability_method),
         "RISK_EXTERNAL_API":  system.external_api_access,
         "RISK_KNOWN_BIAS":    system.known_bias_issues,
         "RISK_NO_AUDIT":      not system.audit_logging_enabled,
@@ -127,7 +127,10 @@ async def assess_risk(system: CreditScoringSystem):
                     mitigation_action = "Confirm no special category data is inadvertently collected through proxy variables in the dataset"
 
             elif code == "RISK_EXPLAINABILITY":
-                if not system.explainability_method:
+                _em_check = (system.explainability_method or "").strip().lower()
+                _neg_check = ["none implemented", "not implemented", "not applicable", "n/a", "na", "none", "no"]
+                _has_explainability = _em_check != "" and not any(_em_check.startswith(n) for n in _neg_check)
+                if not _has_explainability:
                     score = 7
                     severity = "HIGH"
                     mitigation_status = "REQUIRED"
