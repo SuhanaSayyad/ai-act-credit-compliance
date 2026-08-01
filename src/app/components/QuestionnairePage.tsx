@@ -26,19 +26,19 @@ const STEP_META: Record<number, StepMeta> = {
 };
 
 type FieldType = "text" | "toggle" | "select";
-interface Field { id: string; label: string; type: FieldType; placeholder?: string; options?: string[]; help?: string; }
+interface Field { id: string; label: string; type: FieldType; placeholder?: string; options?: string[]; help?: string; required?: boolean; }
 interface Step  { number: number; title: string; subtitle: string; fields: Field[]; }
 
 const STEPS: Step[] = [
   {
     number: 1, title: "System Identification", subtitle: "Basic identifying information about your AI system.",
     fields: [
-      { id: "1.1", label: "System name",         type: "text",   placeholder: "e.g. CreditScore Decision Engine v2.3", help: "The commercial or internal name and version of the AI system as it appears in your technical documentation." },
-      { id: "1.2", label: "Provider organisation", type: "text", placeholder: "e.g. Nordea Financial Services AB",        help: "The legal entity that develops the system or has it developed and places it on the market under its own name." },
+      { id: "1.1", label: "System name",         type: "text",   placeholder: "e.g. CreditScore Decision Engine v2.3", help: "The commercial or internal name and version of the AI system as it appears in your technical documentation." , required: true},
+      { id: "1.2", label: "Provider organisation", type: "text", placeholder: "e.g. Nordea Financial Services AB",        help: "The legal entity that develops the system or has it developed and places it on the market under its own name." , required: true},
       { id: "1.3", label: "Model type", type: "select", options: ["Logistic Regression", "Gradient Boosted Trees", "Random Forest", "XGBoost", "Neural Network", "Other"],
-        help: "The underlying algorithm class. This influences transparency obligations under Article 13." },
-      { id: "1.4", label: "Does the system make fully automated decisions without human review?", type: "toggle", help: "Fully automated decisions trigger Article 22 GDPR safeguards and AI Act oversight requirements under Article 14." },
-      { id: "1.5", label: "Is human oversight available to review decisions?",                    type: "toggle", help: "Article 14 requires high-risk systems to be designed so natural persons can effectively oversee, intervene, and override outputs." },
+        help: "The underlying algorithm class. This influences transparency obligations under Article 13." , required: true},
+      { id: "1.4", label: "Does the system make fully automated decisions without human review?", type: "toggle", help: "Fully automated decisions trigger Article 22 GDPR safeguards and AI Act oversight requirements under Article 14." , required: true},
+      { id: "1.5", label: "Is human oversight available to review decisions?",                    type: "toggle", help: "Article 14 requires high-risk systems to be designed so natural persons can effectively oversee, intervene, and override outputs." , required: true},
       { id: "1.6", label: "Model API endpoint (optional, BYOM)", type: "text", placeholder: "e.g. https://your-model-api.com/predict", help: "Bring Your Own Model: if your production model exposes a prediction endpoint, enter it here and the XAI and Bias modules will assess your actual model instead of the German Credit reference dataset. Leave blank to use the reference dataset." },
       { id: "1.7", label: "Estimated users assessed per year", type: "text", placeholder: "e.g. 50000", help: "The approximate number of individuals whose applications this system will process annually. Article 9(2) requires risk management measures to be proportionate to the scale of deployment, so this figure directly affects the risk scaling context shown in the Article 9 report." },
     ],
@@ -46,36 +46,36 @@ const STEPS: Step[] = [
   {
     number: 2, title: "Data Processing", subtitle: "Data sources, categories, and handling practices.",
     fields: [
-      { id: "2.1", label: "Primary data sources",   type: "text",   placeholder: "e.g. Credit bureau records, bank transaction history", help: "Datasets used to train, validate, and operate the model. Article 10 requires training data to be relevant, representative, and examined for bias." },
-      { id: "2.2", label: "Data retention period",  type: "text",   placeholder: "e.g. 36 months from collection date",                  help: "How long personal data is retained. Must be limited to what is necessary (GDPR Article 5(1)(e)) and documented in the technical file." },
-      { id: "2.3", label: "Does the system process special category data under GDPR Article 9?", type: "toggle", help: "Special category data includes racial or ethnic origin, health, religion, and similar attributes. Requires explicit legal basis and heightened bias scrutiny under AI Act Article 10(5)." },
-      { id: "2.4", label: "Does the system share data with third parties?",                      type: "toggle", help: "Any transfer to external processors or recipients must be covered by data processing agreements and disclosed in your records of processing activities." },
+      { id: "2.1", label: "Primary data sources",   type: "text",   placeholder: "e.g. Credit bureau records, bank transaction history", help: "Datasets used to train, validate, and operate the model. Article 10 requires training data to be relevant, representative, and examined for bias." , required: true},
+      { id: "2.2", label: "Data retention period",  type: "text",   placeholder: "e.g. 36 months from collection date",                  help: "How long personal data is retained. Must be limited to what is necessary (GDPR Article 5(1)(e)) and documented in the technical file." , required: true},
+      { id: "2.3", label: "Does the system process special category data under GDPR Article 9?", type: "toggle", help: "Special category data includes racial or ethnic origin, health, religion, and similar attributes. Requires explicit legal basis and heightened bias scrutiny under AI Act Article 10(5)." , required: true},
+      { id: "2.4", label: "Does the system share data with third parties?",                      type: "toggle", help: "Any transfer to external processors or recipients must be covered by data processing agreements and disclosed in your records of processing activities." , required: true},
     ],
   },
   {
     number: 3, title: "Risk and Security", subtitle: "Known risks, security controls, and audit capabilities.",
     fields: [
-      { id: "3.1", label: "Has a formal security audit been conducted in the last 12 months?", type: "toggle", help: "Article 15 requires appropriate cybersecurity and robustness. An annual independent security audit is expected evidence of an adequate testing cadence." },
-      { id: "3.2", label: "Does the system expose an external API?",                           type: "toggle", help: "External interfaces expand the attack surface. Article 15(4) requires resilience against unauthorised third parties altering the system's use or performance." },
-      { id: "3.3", label: "Are access controls implemented on the model and API?",             type: "toggle", help: "Authentication, authorisation, and rate limiting on the model and endpoints. Baseline controls for the cybersecurity requirement under Article 15." },
-      { id: "3.4", label: "Is audit logging enabled for all model decisions?",                 type: "toggle", help: "Article 12 requires automatic logging of events over the system's lifetime to enable traceability and post-market monitoring." },
-      { id: "3.5", label: "Are there any known bias issues with this system?",                 type: "toggle", help: "Disclose any identified disparities in outcomes across groups. Known bias affecting protected characteristics is a material finding under Article 10(5)." },
+      { id: "3.1", label: "Has a formal security audit been conducted in the last 12 months?", type: "toggle", help: "Article 15 requires appropriate cybersecurity and robustness. An annual independent security audit is expected evidence of an adequate testing cadence." , required: true},
+      { id: "3.2", label: "Does the system expose an external API?",                           type: "toggle", help: "External interfaces expand the attack surface. Article 15(4) requires resilience against unauthorised third parties altering the system's use or performance." , required: true},
+      { id: "3.3", label: "Are access controls implemented on the model and API?",             type: "toggle", help: "Authentication, authorisation, and rate limiting on the model and endpoints. Baseline controls for the cybersecurity requirement under Article 15." , required: true},
+      { id: "3.4", label: "Is audit logging enabled for all model decisions?",                 type: "toggle", help: "Article 12 requires automatic logging of events over the system's lifetime to enable traceability and post-market monitoring." , required: true},
+      { id: "3.5", label: "Are there any known bias issues with this system?",                 type: "toggle", help: "Disclose any identified disparities in outcomes across groups. Known bias affecting protected characteristics is a material finding under Article 10(5)." , required: true},
     ],
   },
   {
     number: 4, title: "Transparency", subtitle: "Explanation methods and disclosure obligations.",
     fields: [
       { id: "4.1", label: "Output explanation method", type: "select", options: ["SHAP Values", "LIME", "Decision Rules", "Feature Importance", "Logistic Coefficients", "Model Cards", "Other", "None"],
-        help: "The technique used to explain individual outputs. Article 13 requires transparency sufficient for deployers to correctly interpret and use results." },
+        help: "The technique used to explain individual outputs. Article 13 requires transparency sufficient for deployers to correctly interpret and use results." , required: true},
       { id: "4.2", label: "Subject notification mechanism",  type: "text",   placeholder: "e.g. Automated email with score category within 24 hours", help: "How affected individuals are informed of a decision and their right to explanation. Timeliness and clarity of this channel are part of the transparency obligation." },
-      { id: "4.3", label: "Is the AI nature of the system disclosed to subjects before assessment?", type: "toggle", help: "Article 50 requires that people are informed when they are being assessed by an AI system, unless it is obvious from the context." },
+      { id: "4.3", label: "Is the AI nature of the system disclosed to subjects before assessment?", type: "toggle", help: "Article 50 requires that people are informed when they are being assessed by an AI system, unless it is obvious from the context." , required: true},
     ],
   },
   {
     number: 5, title: "Rights Impact", subtitle: "Assessment of fundamental rights implications.",
     fields: [
-      { id: "5.1", label: "Vulnerable or protected groups potentially affected", type: "text",   placeholder: "e.g. Minority ethnic groups, low-income households", help: "Groups who may be disproportionately impacted. Article 27 requires the FRIA to consider specific categories of persons likely to be affected." },
-      { id: "5.2", label: "Has a Fundamental Rights Impact Assessment been previously conducted?", type: "toggle", help: "Article 27 requires certain deployers of high-risk systems to conduct a FRIA before deployment, covering rights impacts and mitigation measures envisaged." },
+      { id: "5.1", label: "Vulnerable or protected groups potentially affected", type: "text",   placeholder: "e.g. Minority ethnic groups, low-income households", help: "Groups who may be disproportionately impacted. Article 27 requires the FRIA to consider specific categories of persons likely to be affected." , required: true},
+      { id: "5.2", label: "Has a Fundamental Rights Impact Assessment been previously conducted?", type: "toggle", help: "Article 27 requires certain deployers of high-risk systems to conduct a FRIA before deployment, covering rights impacts and mitigation measures envisaged." , required: true},
       { id: "5.3", label: "Responsible person or team for rights oversight", type: "text", placeholder: "e.g. Chief Compliance Officer, Ethics Review Board", help: "The named person or team accountable for implementing rights-protection measures. Article 27(2)(g) requires identifying who is responsible." },
     ],
   },
@@ -90,6 +90,7 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
   const [currentStep, setCurrentStep]     = useState(1);
   const [answers, setAnswers]             = useState<Record<string, string>>({});
   const [toggleValues, setToggleValues]   = useState<Record<string, boolean | null>>({});
+  const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const [loading, setLoading]             = useState(false);
   const [loadingMsg, setLoadingMsg]       = useState("Initialising assessment...");
@@ -100,8 +101,8 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
   const meta        = STEP_META[currentStep];
   const accentColor = meta.color;
 
-  function handleText(id: string, value: string)    { setAnswers(prev => ({ ...prev, [id]: value })); }
-  function handleToggle(id: string, value: boolean) { setToggleValues(prev => ({ ...prev, [id]: value })); }
+  function handleText(id: string, value: string)    { setAnswers(prev => ({ ...prev, [id]: value })); if (value.trim() !== "") setValidationErrors(prev => { const next = new Set(prev); next.delete(id); return next; }); }
+  function handleToggle(id: string, value: boolean) { setToggleValues(prev => ({ ...prev, [id]: value })); setValidationErrors(prev => { const next = new Set(prev); next.delete(id); return next; }); }
 
   function buildPayload() {
     const systemName = (answers["1.1"] || "").trim() || "CreditAccess";
@@ -234,7 +235,25 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
     }
   }
 
+  function validateCurrentStep(): boolean {
+    const missing = new Set<string>();
+    for (const field of step.fields) {
+      if (!field.required) continue;
+      if (field.type === "toggle") {
+        if (toggleValues[field.id] === undefined || toggleValues[field.id] === null) {
+          missing.add(field.id);
+        }
+      } else {
+        const val = (answers[field.id] || "").trim();
+        if (val === "") missing.add(field.id);
+      }
+    }
+    setValidationErrors(missing);
+    return missing.size === 0;
+  }
+
   function handleContinue() {
+    if (!validateCurrentStep()) return;
     if (currentStep < totalSteps) {
       setCurrentStep(s => s + 1);
     } else {
@@ -243,6 +262,7 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
   }
 
   function handlePrevious() {
+    setValidationErrors(new Set());
     if (currentStep > 1) setCurrentStep(s => s - 1);
     else onBack();
   }
@@ -386,11 +406,16 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
             <div style={{ height: "1px", background: SUBTLE }} />
 
             <div style={{ padding: "36px 48px 0" }}>
-              {step.fields.map((field, fi) => (
+              {step.fields.map((field, fi) => {
+                const hasError = validationErrors.has(field.id);
+                return (
                 <div key={field.id} style={{ marginBottom: fi < step.fields.length - 1 ? "36px" : "44px" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "10px" }}>
                     <span style={{ fontFamily: FONT_MONO, fontSize: "11px", fontWeight: 700, color: accentColor, letterSpacing: "0.06em", minWidth: "26px", paddingTop: "1px", lineHeight: 1.5, flexShrink: 0 }}>{field.id}</span>
-                    <label style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: "13px", color: TEXT, flex: 1, lineHeight: 1.5 }}>{field.label}</label>
+                    <label style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: "13px", color: TEXT, flex: 1, lineHeight: 1.5 }}>
+                      {field.label}
+                      {field.required && <span style={{ color: "#DC2626", marginLeft: "4px" }}>*</span>}
+                    </label>
                     {field.help && (
                       <div style={{ position: "relative", flexShrink: 0, marginTop: "2px" }} onMouseEnter={() => setActiveTooltip(field.id)} onMouseLeave={() => setActiveTooltip(null)}>
                         <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `1.5px solid ${activeTooltip === field.id ? accentColor : "#CBD5E1"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "help", background: activeTooltip === field.id ? `${accentColor}14` : "transparent", transition: "all 0.15s" }}>
@@ -407,41 +432,57 @@ export function QuestionnairePage({ onBack, onComplete }: Props) {
                   </div>
 
                   {field.type === "text" && (
-                    <input type="text" value={answers[field.id] || ""} onChange={e => handleText(field.id, e.target.value)} placeholder={field.placeholder} style={inputBase}
-                      onFocus={e => { e.target.style.borderBottomColor = accentColor; }}
-                      onBlur={e => { e.target.style.borderBottomColor = SUBTLE; }} />
+                    <>
+                      <input type="text" value={answers[field.id] || ""} onChange={e => handleText(field.id, e.target.value)} placeholder={field.placeholder} style={{ ...inputBase, borderBottomColor: hasError ? "#DC2626" : SUBTLE }}
+                        onFocus={e => { e.target.style.borderBottomColor = hasError ? "#DC2626" : accentColor; }}
+                        onBlur={e => { e.target.style.borderBottomColor = hasError ? "#DC2626" : SUBTLE; }} />
+                      {hasError && <p style={{ fontFamily: FONT_SANS, fontSize: "12px", color: "#DC2626", margin: "6px 0 0" }}>This field is required.</p>}
+                    </>
                   )}
 
                   {field.type === "select" && (
                     <div style={{ position: "relative" }}>
                       <select value={answers[field.id] || ""} onChange={e => handleText(field.id, e.target.value)}
-                        style={{ ...inputBase, appearance: "none" as const, WebkitAppearance: "none" as const, paddingRight: "28px", cursor: "pointer", color: answers[field.id] ? TEXT : "#9CA3AF" }}
-                        onFocus={e => { e.target.style.borderBottomColor = accentColor; }}
-                        onBlur={e => { e.target.style.borderBottomColor = SUBTLE; }}>
+                        style={{ ...inputBase, appearance: "none" as const, WebkitAppearance: "none" as const, paddingRight: "28px", cursor: "pointer", color: answers[field.id] ? TEXT : "#9CA3AF", borderBottomColor: hasError ? "#DC2626" : SUBTLE }}
+                        onFocus={e => { e.target.style.borderBottomColor = hasError ? "#DC2626" : accentColor; }}
+                        onBlur={e => { e.target.style.borderBottomColor = hasError ? "#DC2626" : SUBTLE; }}>
                         <option value="" disabled>Select an option</option>
                         {field.options?.map(opt => <option key={opt} value={opt} style={{ color: TEXT }}>{opt}</option>)}
                       </select>
                       <span style={{ position: "absolute", right: "4px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: MUTED, fontSize: "11px" }}>▾</span>
+                      {hasError && <p style={{ fontFamily: FONT_SANS, fontSize: "12px", color: "#DC2626", margin: "6px 0 0" }}>Please select an option.</p>}
                     </div>
                   )}
 
                   {field.type === "toggle" && (
-                    <div style={{ display: "inline-flex", background: "#F1F5F9", borderRadius: "8px", padding: "3px", gap: "2px", marginTop: "2px" }}>
-                      {[{ label: "Yes", val: true }, { label: "No", val: false }].map(opt => {
-                        const selected = toggleValues[field.id] === opt.val;
-                        return (
-                          <button key={opt.label} onClick={() => handleToggle(field.id, opt.val)}
-                            style={{ fontFamily: FONT_SANS, fontWeight: 500, fontSize: "13px", color: selected ? WHITE : MUTED, background: selected ? accentColor : "transparent", border: "none", borderRadius: "6px", padding: "8px 30px", cursor: "pointer", transition: "all 0.15s", outline: "none" }}>
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <>
+                      <div style={{ display: "inline-flex", background: "#F1F5F9", borderRadius: "8px", padding: "3px", gap: "2px", marginTop: "2px", border: hasError ? "1px solid #DC2626" : "1px solid transparent" }}>
+                        {[{ label: "Yes", val: true }, { label: "No", val: false }].map(opt => {
+                          const selected = toggleValues[field.id] === opt.val;
+                          return (
+                            <button key={opt.label} onClick={() => handleToggle(field.id, opt.val)}
+                              style={{ fontFamily: FONT_SANS, fontWeight: 500, fontSize: "13px", color: selected ? WHITE : MUTED, background: selected ? accentColor : "transparent", border: "none", borderRadius: "6px", padding: "8px 30px", cursor: "pointer", transition: "all 0.15s", outline: "none" }}>
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {hasError && <p style={{ fontFamily: FONT_SANS, fontSize: "12px", color: "#DC2626", margin: "6px 0 0" }}>Please select Yes or No.</p>}
+                    </>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
+            {validationErrors.size > 0 && (
+              <div style={{ background: "#FEF2F2", borderTop: "1px solid #FCA5A5", padding: "12px 48px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ color: "#DC2626", fontSize: "14px" }}>&#9888;</span>
+                <span style={{ fontFamily: FONT_SANS, fontSize: "13px", color: "#991B1B" }}>
+                  Please complete {validationErrors.size} required field{validationErrors.size > 1 ? "s" : ""} highlighted above before continuing.
+                </span>
+              </div>
+            )}
             <div style={{ background: GREY, borderTop: `1px solid ${SUBTLE}`, padding: "20px 48px", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
               <button onClick={handlePrevious} style={{ fontFamily: FONT_SANS, fontWeight: 500, fontSize: "13px", color: MUTED, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", padding: 0, transition: "color 0.15s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = TEXT; }}
