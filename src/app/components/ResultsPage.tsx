@@ -107,12 +107,13 @@ function buildReports(results: ApiResults): Report[] {
     if (!m || Object.keys(m).length === 0) return;
     const spd = m.statistical_parity_difference ?? m.demographic_parity_difference ?? {};
     const di  = m.disparate_impact_ratio ?? {};
+    const spdLevel = spd.bias_level ?? (Math.abs(spd.value ?? 0) > spdThreshold ? "EXCEEDS THRESHOLD" : "WITHIN THRESHOLD");
     const sev = toSev(spd.bias_level ?? (Math.abs(spd.value ?? 0) > spdThreshold ? "HIGH" : "LOW"));
     biasFindings.push({
       id:          `B-10.${biasFindings.length + 1}`,
       name:        `${label} Disparity (SPD: ${typeof spd.value === "number" ? spd.value.toFixed(4) : "N/A"})`,
       status:      sev,
-      description: `Statistical Parity Difference: ${typeof spd.value === "number" ? spd.value.toFixed(4) : "N/A"} | Disparate Impact: ${typeof di.value === "number" ? di.value.toFixed(4) : "N/A"}. Threshold applied: ${spdThreshold}. ${di.status ?? ""}`,
+      description: `Statistical Parity Difference (SPD): ${typeof spd.value === "number" ? spd.value.toFixed(4) : "N/A"} against a threshold of ${spdThreshold} -> ${spdLevel}. Disparate Impact (DI) ratio: ${typeof di.value === "number" ? di.value.toFixed(4) : "N/A"} against the 80%-125% acceptable range -> ${di.status ?? "N/A"}. These are two independent fairness checks and may not always agree.`,
       citation:    "Article 10(5), EU Regulation 2024/1689 – Training data bias examination.",
       mitigation:  biasDetected ? "Apply re-weighting or re-sampling to training data for affected demographic groups." : "Continue monitoring. No immediate action required.",
     });
@@ -154,7 +155,7 @@ function buildReports(results: ApiResults): Report[] {
     const top = topFeatures[0];
     xaiFindings.push({
       id: "X-13.2", name: "Feature Importance Coverage", status: xaiCompliant ? "LOW" : "MEDIUM",
-      description: `Top predictive feature: ${top.feature ?? top.name ?? "Unknown"} (importance: ${typeof top.importance === "number" ? top.importance.toFixed(4) : "N/A"}). ${topFeatures.length} features analysed.`,
+      description: `Top predictive feature: ${top.feature ?? top.name ?? "Unknown"} (importance: ${typeof (top.importance_score ?? top.importance) === "number" ? (top.importance_score ?? top.importance).toFixed(4) : "N/A"}). ${topFeatures.length} features analysed.`,
       citation: "Article 13(3)(b), EU Regulation 2024/1689 – Performance characteristics and known limitations.",
       mitigation: "Provide feature importance documentation to deployers and enable individual decision explanations.",
     });
