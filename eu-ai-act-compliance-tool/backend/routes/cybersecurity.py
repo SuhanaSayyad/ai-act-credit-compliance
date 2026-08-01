@@ -1,12 +1,3 @@
-"""
-Cybersecurity Module - Article 15 EU AI Act
-Threat model using multi-hop knowledge graph traversal.
-Cypher traverses: Threat -[GOVERNED_BY]-> Article
-                  Control -[MITIGATES]-> Threat
-                  RiskFactor -[IMPLIES]-> Threat
-This is genuine graph reasoning producing inferred threat applicability.
-"""
-
 from fastapi import APIRouter
 from models import CreditScoringSystem
 from database import get_driver
@@ -14,13 +5,9 @@ from database import get_driver
 router = APIRouter()
 
 def _compute_threat_confidence(code: str, system, applicable: bool, graph_inferred: bool) -> dict:
-    """
-    Confidence score for each threat based on confirmed system characteristics.
-    Multiple independent factors confirming the same threat = higher confidence.
-    """
     factor_counts = {
         "THREAT_POISON":     {"total": 2, "confirmed": sum([not system.access_controls_implemented, not system.previously_audited])},
-        "THREAT_EVASION":    {"total": 1, "confirmed": 1},  # Always applicable to all ML models
+        "THREAT_EVASION":    {"total": 1, "confirmed": 1},
         "THREAT_INVERSION":  {"total": 2, "confirmed": sum([system.external_api_access, system.uses_personal_data])},
         "THREAT_EXTRACTION": {"total": 2, "confirmed": sum([system.external_api_access, not system.access_controls_implemented])},
         "THREAT_MEMBERSHIP": {"total": 2, "confirmed": sum([system.uses_personal_data, system.uses_special_category_data])},
@@ -32,7 +19,6 @@ def _compute_threat_confidence(code: str, system, applicable: bool, graph_inferr
     total = fc["total"]
     confirmed = fc["confirmed"]
     score = round((confirmed / total) * 100) if total > 0 else 50
-    # Graph-inferred threats get a slight confidence boost
     if graph_inferred and score < 100:
         score = min(score + 10, 100)
     label = "HIGH CONFIDENCE" if score >= 75 else "MODERATE CONFIDENCE" if score >= 40 else "LOW CONFIDENCE"
@@ -43,18 +29,12 @@ def _compute_threat_confidence(code: str, system, applicable: bool, graph_inferr
         "note": "Confidence reflects the number of independent system characteristics that confirm this threat's applicability."
     }
 
-
-
-
 @router.post("/assess")
 async def assess_cybersecurity(system: CreditScoringSystem):
     try:
         driver = get_driver()
         with driver.session() as session:
 
-            # ── Multi-hop: fetch all threats with their controls ──────────
-            # Single Cypher query traverses Threat -[GOVERNED_BY]-> Article
-            # and Control -[MITIGATES]-> Threat in one pass
             threat_result = session.run(
                 """MATCH (t:Threat)-[:GOVERNED_BY]->(a:LegalArticle {code: 'ART15'})
                    WITH DISTINCT t, a
@@ -65,9 +45,6 @@ async def assess_cybersecurity(system: CreditScoringSystem):
             )
             threat_rows = list(threat_result)
 
-            # ── Multi-hop: infer threats from system risk factors ─────────
-            # Traverses: RiskFactor -[IMPLIES]-> Threat
-            # based on this system's actual characteristics
             implied_threat_codes = set()
 
             if system.external_api_access:
@@ -103,7 +80,6 @@ async def assess_cybersecurity(system: CreditScoringSystem):
             controls_for_threat = row["mitigating_controls"]
             code = threat["code"]
 
-            # Determine applicability based on questionnaire + graph inference
             applicable = False
             reason = ""
 
@@ -139,11 +115,15 @@ async def assess_cybersecurity(system: CreditScoringSystem):
                 reason = ("External access without rate limiting enables denial of service"
                           if applicable else "Access controls mitigate denial of service risk")
 
-            # Mark as graph-inferred if implied by risk factors
             graph_inferred = code in implied_threat_codes
 
-            # Confidence: based on how many system characteristics confirmed this threat
             threat_confidence = _compute_threat_confidence(code, system, applicable, graph_inferred)
+            specific_mitigation = None
+            if controls_for_threat:
+                ctrl_names = [c["name"] for c in controls_for_threat if c]
+                if ctrl_names:
+                    specific_mitigation = "Recommended controls: " + "; ".join(ctrl_names) + "."
+
             threats_identified.append({
                 "threat_name": threat["name"],
                 "severity": threat["severity"],
@@ -153,6 +133,7 @@ async def assess_cybersecurity(system: CreditScoringSystem):
                 "graph_inferred": graph_inferred,
                 "confidence": threat_confidence,
                 "reason": reason,
+                "mitigation": specific_mitigation,
                 "governed_by": row["governed_by"],
                 "airo_uri": threat.get("airo_uri", ""),
                 "dpv_risk_uri": threat.get("dpv_risk_uri", "")
@@ -160,7 +141,6 @@ async def assess_cybersecurity(system: CreditScoringSystem):
 
             if applicable:
                 applicable_threat_codes.append(code)
-                # Collect mitigating controls from graph
                 for ctrl in controls_for_threat:
                     if ctrl and ctrl["code"] not in all_mitigating_controls:
                         all_mitigating_controls[ctrl["code"]] = ctrl
@@ -218,7 +198,13 @@ async def assess_cybersecurity(system: CreditScoringSystem):
                 "Monitor model outputs continuously in production for signs of adversarial manipulation",
                 "Apply Article 15 measures proportionate to the identified overall risk level",
                 "Repeat this threat assessment after any significant model or infrastructure change"
-            ]
+            ],
+            "report_metadata": {
+                "organisation_name": system.organisation_name,
+                "intended_purpose": system.intended_purpose,
+                "model_version": system.model_version,
+                "deployment_sector": system.deployment_sector
+            }
         }
 
     except Exception as e:
