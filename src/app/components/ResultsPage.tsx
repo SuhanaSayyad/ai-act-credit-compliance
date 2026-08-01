@@ -47,6 +47,8 @@ interface Report {
   findings: Finding[];
   recommendations: { n: number; text: string }[];
   overallConfidence?: { score: number; label: string };
+  complianceStatus?: string;
+  moduleFailed?: boolean;
   contextNote?: string;
 }
 
@@ -183,7 +185,7 @@ function buildReports(results: ApiResults): Report[] {
         id:          `C-15.${i + 1}`,
         name:        t.threat_name ?? t.name ?? `Threat ${i + 1}`,
         status:      toSev(t.severity),
-        description: t.description ?? `${t.threat_name ?? "Threat"} identified.${t.graph_inferred ? " (graph-inferred from system profile)" : ""}`,
+        description: t.reason ? `${t.reason}${t.graph_inferred ? " (identified through knowledge graph inference from system risk profile, not direct evidence of an actual attack)" : " (identified from declared system characteristics, not direct evidence of an actual attack)"}` : (t.description ?? `${t.threat_name ?? "Threat"} identified.`),
         citation:    `Article 15, EU Regulation 2024/1689 – Cybersecurity and robustness. MITRE ATLAS: ${t.governed_by ?? t.threat_id ?? "AML.T"}`,
         mitigation:  t.mitigation ?? t.control ?? "Implement appropriate technical controls and document security posture.",
         confidence:  t.confidence ? { score: t.confidence.score, label: t.confidence.label } : undefined,
@@ -244,12 +246,42 @@ function buildReports(results: ApiResults): Report[] {
         { n: 3, text: "Make a non-confidential summary of the FRIA publicly available after registration as required by Article 27(9)." },
       ];
 
+  // Detect which specific modules failed to respond, so we never silently
+  // show a falsely reassuring LOW/MEDIUM result for a module that never ran.
+  const failedKeys = new Set(
+    (results.failedModules ?? []).map(msg => msg.split(":")[0].trim())
+  );
+  const NOT_ASSESSED_FINDING = (moduleName: string): Finding => ({
+    id: "N/A",
+    name: "Module Not Assessed",
+    status: "MEDIUM",
+    description: `The ${moduleName} module could not be reached and no assessment was performed. Do not interpret the absence of findings as a clean result. Retry the assessment before relying on this section.`,
+    citation: "N/A - module unavailable",
+    mitigation: "Retry the assessment. If the issue persists, verify the backend service is running and reachable.",
+  });
+  const NOT_ASSESSED_RECS = [
+    { n: 1, text: "This module returned an error and could not complete its assessment. Retry before relying on this section." },
+  ];
+
+  function applyFailureOverride(key: string, report: Report): Report {
+    if (!failedKeys.has(key)) return report;
+    return {
+      ...report,
+      findings: [NOT_ASSESSED_FINDING(report.name)],
+      recommendations: NOT_ASSESSED_RECS,
+      moduleFailed: true,
+      overallConfidence: undefined,
+      contextNote: undefined,
+      complianceStatus: undefined,
+    };
+  }
+
   return [
-    { tab: 1, article: "Art. 9",     name: "Risk Management System",               description: "Evaluation of continuous risk identification, analysis, and mitigation across the AI system lifecycle.", status: riskLevel,  findings: riskFindings,  recommendations: riskRecs, overallConfidence: risk?.overall_risk_confidence ? { score: risk.overall_risk_confidence.score, label: risk.overall_risk_confidence.label } : undefined, contextNote: risk?.deployment_context?.scale_note },
-    { tab: 2, article: "Art. 10(5)", name: "Bias and Fairness Assessment",          description: "Statistical evaluation of training data and model outputs for discriminatory patterns affecting protected characteristics.", status: biasSev,   findings: biasFindings,  recommendations: biasRecs },
-    { tab: 3, article: "Art. 13",    name: "Transparency and Explainability",       description: "Assessment of explanation quality, individual decision transparency, and disclosure obligations to affected individuals.", status: xaiSev,    findings: xaiFindings,   recommendations: xaiRecs },
-    { tab: 4, article: "Art. 15",    name: "Cybersecurity and Robustness",          description: "Resilience evaluation against adversarial inputs, data poisoning, model extraction, and other MITRE ATLAS threat categories.", status: cyberSev,  findings: cyberFindings, recommendations: cyberRecs, overallConfidence: cybersecurity?.overall_security_confidence ? { score: cybersecurity.overall_security_confidence.score, label: cybersecurity.overall_security_confidence.label } : undefined },
-    { tab: 5, article: "Art. 27",    name: "Fundamental Rights Impact Assessment",  description: "Structured evaluation of material impacts on autonomy, dignity, equality, and individual rights guaranteed under the EU Charter.", status: friaLevel, findings: friaFindings,  recommendations: friaRecs, overallConfidence: fria?.overall_confidence ? { score: fria.overall_confidence.score, label: fria.overall_confidence.label } : undefined, contextNote: fria?.affected_population_context?.vulnerable_groups_detected ? `Vulnerable groups detected in affected population: ${fria.affected_population_context.affected_population}` : undefined },
+    applyFailureOverride("risk", { tab: 1, article: "Art. 9",     name: "Risk Management System",               description: "Evaluation of continuous risk identification, analysis, and mitigation across the AI system lifecycle.", status: riskLevel,  findings: riskFindings,  recommendations: riskRecs, overallConfidence: risk?.overall_risk_confidence ? { score: risk.overall_risk_confidence.score, label: risk.overall_risk_confidence.label } : undefined, contextNote: risk?.deployment_context?.scale_note }),
+    applyFailureOverride("bias", { tab: 2, article: "Art. 10(5)", name: "Bias and Fairness Assessment",          description: "Statistical evaluation of training data and model outputs for discriminatory patterns affecting protected characteristics.", status: biasSev,   findings: biasFindings,  recommendations: biasRecs }),
+    applyFailureOverride("xai", { tab: 3, article: "Art. 13",    name: "Transparency and Explainability",       description: "Assessment of explanation quality, individual decision transparency, and disclosure obligations to affected individuals.", status: xaiSev,    findings: xaiFindings,   recommendations: xaiRecs, complianceStatus: xaiStatusStr }),
+    applyFailureOverride("cybersecurity", { tab: 4, article: "Art. 15",    name: "Cybersecurity and Robustness",          description: "Resilience evaluation against adversarial inputs, data poisoning, model extraction, and other MITRE ATLAS threat categories.", status: cyberSev,  findings: cyberFindings, recommendations: cyberRecs, overallConfidence: cybersecurity?.overall_security_confidence ? { score: cybersecurity.overall_security_confidence.score, label: cybersecurity.overall_security_confidence.label } : undefined }),
+    applyFailureOverride("fria", { tab: 5, article: "Art. 27",    name: "Fundamental Rights Impact Assessment",  description: "Structured evaluation of material impacts on autonomy, dignity, equality, and individual rights guaranteed under the EU Charter.", status: friaLevel, findings: friaFindings,  recommendations: friaRecs, overallConfidence: fria?.overall_confidence ? { score: fria.overall_confidence.score, label: fria.overall_confidence.label } : undefined, contextNote: fria?.affected_population_context?.vulnerable_groups_detected ? `Vulnerable groups detected in affected population: ${fria.affected_population_context.affected_population}` : undefined }),
   ];
 }
 
@@ -333,7 +365,7 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
   const report  = REPORTS[activeTab - 1];
   const articleColor = ARTICLE_COLOR[report.article] ?? BLUE;
   const counts  = { HIGH: 0, MEDIUM: 0, LOW: 0 } as Record<Sev, number>;
-  REPORTS.forEach(r => { counts[r.status]++; });
+  REPORTS.forEach(r => { if (!r.moduleFailed) counts[r.status]++; });
 
   function downloadBlob(content: string, mime: string, filename: string) {
     const dataBlob = new Blob([content], { type: mime });
@@ -533,7 +565,7 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
                   onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "5px" }}>
                     <span style={{ fontFamily: FONT_MONO, fontSize: "10px", fontWeight: 500, letterSpacing: "0.06em", color: artColor }}>{r.article}</span>
-                    <span style={{ fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 500, letterSpacing: "0.08em", color: sev.color }}>{r.status}</span>
+                    <span style={{ fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 500, letterSpacing: "0.08em", color: r.moduleFailed ? "#B45309" : sev.color }}>{r.moduleFailed ? "N/A" : r.status}</span>
                   </div>
                   <div style={{ fontFamily: FONT_SANS, fontWeight: isActive ? 600 : 400, fontSize: "13.5px", color: isActive ? TEXT : MUTED, lineHeight: 1.4 }}>{r.name}</div>
                 </button>
@@ -549,10 +581,31 @@ export function ResultsPage({ apiResults, onBack, onHome }: Props) {
               <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", color: articleColor }}>{report.article}</span>
               <span style={{ color: "rgba(0,0,0,0.18)", fontSize: "10px" }}>·</span>
               <span style={{ fontFamily: FONT_MONO, fontSize: "10px", letterSpacing: "0.1em", color: MUTED }}>SECTION {report.tab} OF {REPORTS.length}</span>
-              <SevChip status={report.status} />
+              {report.moduleFailed ? (
+                <span style={{
+                  fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
+                  color: "#78350F", background: "rgba(245,158,11,0.15)",
+                  border: "1px solid rgba(245,158,11,0.4)", padding: "3px 8px", borderRadius: "3px"
+                }}>
+                  NOT ASSESSED - MODULE FAILED
+                </span>
+              ) : (
+                <SevChip status={report.status} />
+              )}
               {report.overallConfidence && (
                 <span style={{ fontFamily: FONT_MONO, fontSize: "9px", fontWeight: 500, color: MUTED, background: "rgba(0,0,0,0.04)", padding: "3px 8px", borderRadius: "3px" }}>
                   {report.overallConfidence.score}% overall confidence
+                </span>
+              )}
+              {report.complianceStatus && (
+                <span style={{
+                  fontFamily: FONT_MONO, fontSize: "10px", fontWeight: 700, letterSpacing: "0.05em",
+                  color: report.complianceStatus === "COMPLIANT" ? "#065F46" : "#7F1D1D",
+                  background: report.complianceStatus === "COMPLIANT" ? "rgba(16,185,129,0.12)" : "rgba(220,38,38,0.12)",
+                  border: `1px solid ${report.complianceStatus === "COMPLIANT" ? "rgba(16,185,129,0.4)" : "rgba(220,38,38,0.4)"}`,
+                  padding: "4px 10px", borderRadius: "3px"
+                }}>
+                  COMPLIANCE STATUS: {report.complianceStatus}
                 </span>
               )}
             </div>
