@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [2026-08-02] - Kappa Calculation and Final Documentation
+## [2026-08-03] - Kappa Calculation and Final Documentation
 
 ### Added
 - Computed actual Cohen's quadratic weighted Kappa across all six completed expert reviewer responses (previously reported as pending)
