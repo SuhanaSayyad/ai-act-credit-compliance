@@ -53,7 +53,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 Seven verified code-level defects identified through expert review, corrected and re-tested against three independently designed test scenarios:
 - Bring Your Own Model connector disconnected across three layers of the stack (frontend field, backend router registration, payload construction)
-- Seven of twenty-two questionnaire fields collected but never referenced in any compliance calculation
+- Seven of twenty-two questionnaire fields collected but never referenced in any compliance calculation — a recurrence of the field-utilisation gap partially addressed on 2026-07-26; this pass confirmed `data_retention_period`, `affected_population`, `organisation_name`, and one further field remained genuinely unreferenced despite the earlier attempt, and fully resolved them
 - Bias metric labelling ambiguity: Statistical Parity Difference and Disparate Impact were combined into a single sentence, making a non-compliant SPD value appear to have passed its own threshold
 - Feature importance display showing "N/A" due to a backend/frontend field name mismatch (`importance_score` vs `importance`)
 - Compliance status determination embedded mid-sentence in report text rather than shown as a distinct, labelled element
@@ -84,10 +84,10 @@ Seven verified code-level defects identified through expert review, corrected an
 
 ### Fixed
 - Bring Your Own Model (BYOM) connector fully reconnected: frontend field added, backend router registered in the main application, external model call payload no longer hardcoded to null
-- All twenty-two questionnaire payload fields wired into compliance logic:
+- Additional questionnaire payload fields wired into compliance logic:
   - `data_sources` and `estimated_users_per_year` now feed Article 9 risk proportionality and proxy-discrimination detection
-  - `data_retention_period` and `affected_population` now feed Article 27 GDPR data-minimisation checks and vulnerable-population detection
-  - `organisation_name`, `intended_purpose`, and `model_version` now populate report metadata across all five modules
+  - `intended_purpose` and `model_version` now populate report metadata across all five modules
+  - Note: `data_retention_period`, `affected_population`, and `organisation_name` were intended to be included in this pass but remained unreferenced in compliance logic; this was not caught at the time and was subsequently identified independently through expert code review (see 2026-07-28 to 2026-08-01 entry below), where it was fully resolved
 
 ### Changed
 - Sensitivity analysis (fifteen scenarios) re-run following the above fixes; all results confirmed consistent with the pre-fix baseline
