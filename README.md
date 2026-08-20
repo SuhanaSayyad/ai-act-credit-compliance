@@ -89,8 +89,11 @@ An unsolicited independent code-level audit of the project's source code (fronte
 ## Academic Context
 
 **Student:** Suhana Sayyad (A00336132)
+
 **Programme:** MSc Software Design with Cybersecurity
+
 **Institution:** Technological University of the Shannon, Athlone
+
 **Supervisor:** Dr. Amit Hirway
 
 ## Limitations
