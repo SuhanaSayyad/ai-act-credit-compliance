@@ -55,7 +55,8 @@ The knowledge graph carries formal ontology annotations from the Data Privacy Vo
 
 This repository contains the frontend application. The backend (FastAPI, Neo4j integration, compliance logic) is maintained in a separate repository and deployed independently to Hugging Face Spaces.
 
-├── src/ # React/TypeScript frontend source
+```text
+├── src/                    # React/TypeScript frontend source
 ├── index.html
 ├── package.json
 ├── vite.config.ts
@@ -64,7 +65,7 @@ This repository contains the frontend application. The backend (FastAPI, Neo4j i
 ├── CHANGELOG.md
 ├── ATTRIBUTIONS.md
 └── README.md
-
+```
 
 ## Running Locally
 
