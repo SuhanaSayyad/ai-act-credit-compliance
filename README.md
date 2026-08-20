@@ -72,6 +72,7 @@ This repository contains the frontend application. The backend (FastAPI, Neo4j i
 This repository (frontend only):
 
 npm install
+
 npm run dev
 
 
