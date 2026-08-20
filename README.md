@@ -5,16 +5,14 @@ An automated, knowledge graph-driven compliance tool that unifies all five manda
 Built as part of an MSc dissertation in Software Design with Cybersecurity at the Technological University of the Shannon, Athlone.
 
 **Live tool:** https://ai-act-credit-compliance.vercel.app
-
 **Backend API:** https://suhanasayyad-ai-act-compliance-backend.hf.space
-
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
 ---
 
 ## The Problem
 
-Credit scoring systems are classified as high-risk AI under Annex III Point 5(b) of Regulation (EU) 2024/1689, triggering five mandatory compliance obligations that must all be satisfied before deployment. Current practice addresses these separately, using different specialist teams and tools, with no unified methodology. The European Banking Authority estimates this takes between 120 and 480 minutes per assessment cycle per system. No existing published tool automates coverage of all five obligations in a single workflow.
+Credit scoring systems are classified as high-risk AI under Annex III Point 5(b) of Regulation (EU) 2024/1689, triggering five mandatory compliance obligations that must all be satisfied before deployment. Current practice addresses these separately, using different specialist teams and tools, with no unified methodology. A European Banking Authority case study on automated creditworthiness assessment found that manual data collection alone could take up to one week per case before automation. No existing published tool automates coverage of all five obligations in a single workflow.
 
 ## What This Tool Does
 
@@ -34,7 +32,7 @@ A live "Bring Your Own Model" connector lets organisations assess their own prod
 
 - **100% legal coverage** of 21 requirements independently traced to specific EU AI Act article clauses
 - **63.3% average feature overlap, 0.605 Spearman rank correlation** against the Kozodoi et al. (2022) published XAI fidelity benchmark
-- **Mean full assessment time of 3.085 seconds** across 75 measurements, versus an estimated manual baseline of 120 to 480 minutes
+- **Mean full assessment time of 3.085 seconds** across 75 measurements, an estimated speedup on the order of 196,000 times against the EBA's documented manual baseline of up to one week per case
 - **15-scenario systematic sensitivity analysis** confirming proportionate, legally consistent behaviour across the full risk spectrum
 - **Six independent domain experts** completed structured review (Cohen's weighted Kappa 0.317 overall, rising to 0.442 excluding one reviewer whose independently corroborated audit found the most defects)
 - **An unsolicited independent code audit** from a Product Lead in Credit Decisioning at a major European bank identified further real defects, all verified and corrected
@@ -55,8 +53,7 @@ The knowledge graph carries formal ontology annotations from the Data Privacy Vo
 
 This repository contains the frontend application. The backend (FastAPI, Neo4j integration, compliance logic) is maintained in a separate repository and deployed independently to Hugging Face Spaces.
 
-```
-├── src/                  # React/TypeScript frontend source
+├── src/ # React/TypeScript frontend source
 ├── index.html
 ├── package.json
 ├── vite.config.ts
@@ -65,15 +62,15 @@ This repository contains the frontend application. The backend (FastAPI, Neo4j i
 ├── CHANGELOG.md
 ├── ATTRIBUTIONS.md
 └── README.md
-```
+
 
 ## Running Locally
 
 This repository (frontend only):
-```
+
 npm install
 npm run dev
-```
+
 
 The frontend expects the backend API to be reachable at the URL configured in the app; by default this points to the live Hugging Face Spaces deployment. To run the backend locally instead, see the backend repository, which requires a Neo4j Aura instance (or local Neo4j) with the knowledge graph schema loaded and database connection environment variables configured.
 
