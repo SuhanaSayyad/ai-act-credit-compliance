@@ -5,7 +5,9 @@ An automated, knowledge graph-driven compliance tool that unifies all five manda
 Built as part of an MSc dissertation in Software Design with Cybersecurity at the Technological University of the Shannon, Athlone.
 
 **Live tool:** https://ai-act-credit-compliance.vercel.app
+
 **Backend API:** https://suhanasayyad-ai-act-compliance-backend.hf.space
+
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
 ---
