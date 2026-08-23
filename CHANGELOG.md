@@ -14,9 +14,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Corrected README architecture description from "five parallel compliance API endpoints" to "five compliance API endpoints." Measured response-time data (mean per-call time × five ≈ mean full-assessment time) is consistent with sequential execution across the five compliance endpoints, not parallel execution.
 - Corrected DPV ontology version reference from "v2.3" to "v2" across documentation, matching the actual cited publication (Pandit et al., "Data Privacy Vocabulary (DPV) – Version 2.0," ISWC 2024).
 
-### Flagged for verification (not yet resolved)
-- An unresolved internal discrepancy was identified between different parts of the project's own documentation regarding Random Forest's explainability method. The Week 6 workbook entry and the "Challenges Encountered" reflection both describe switching Random Forest from SHAP TreeExplainer to Gini-based feature importance due to memory constraints on the Hugging Face free tier. The workbook's later "Technical Milestones Completed" summary, however, states Random Forest uses SHAP TreeExplainer alongside XGBoost, which is also what the thesis and current conference paper state. This must be verified directly against the live deployed backend code before final submission, and all affected documents (thesis Table 7/§4.4/§5.3.2, conference paper Table III/§IV.C, this changelog, and the workbook) corrected to match whichever is actually true of the current deployment.
-
 ---
 
 ## [2026-08-03] - Kappa Calculation and Final Documentation
