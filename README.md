@@ -80,11 +80,6 @@ npm run dev
 
 The frontend expects the backend API to be reachable at the URL configured in the app; by default this points to the live Hugging Face Spaces deployment. To run the backend locally instead, see the backend repository, which requires a Neo4j Aura instance (or local Neo4j) with the knowledge graph schema loaded and database connection environment variables configured.
 
-## Documentation
-
-- Full dissertation methodology and results: see the Final Results Report (submitted separately as part of the MSc programme)
-- Conference paper: *AI Act Compliance for Credit Scoring: Automating FRIA, Cybersecurity and Fairness*
-- [CHANGELOG.md](./CHANGELOG.md) for a full history of project changes, fixes, and evaluation milestones
 
 ## Independent Audit
 
