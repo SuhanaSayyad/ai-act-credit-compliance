@@ -6,7 +6,9 @@ Built as part of an MSc dissertation in Software Design with Cybersecurity at th
 
 **Live tool:** https://ai-act-credit-compliance.vercel.app
 
+
 **Backend API:** https://suhanasayyad-ai-act-compliance-backend.hf.space
+
 
 **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
@@ -33,8 +35,8 @@ A live "Bring Your Own Model" connector lets organisations assess their own prod
 ## Key Results
 
 - **100% legal coverage** of 21 requirements independently traced to specific EU AI Act article clauses
-- **63.3% average feature overlap, 0.605 Spearman rank correlation** against the Kozodoi et al. (2022) published XAI fidelity benchmark
-- **Mean full assessment time of 3.085 seconds** across 75 measurements, an estimated speedup on the order of 196,000 times against the EBA's documented manual baseline of up to one week per case
+- **63.3% average feature overlap, 0.605 Spearman rank correlation** against a self-defined reference feature-importance ranking, evaluated across three complementary fidelity metrics (see dissertation Chapter 5)
+- **Mean full assessment time of 3.085 seconds** across 75 measurements, comfortably within the ten-second success threshold and several orders of magnitude faster than the EBA's documented manual baseline of up to one week per case (no precise speedup multiplier is claimed, since the EBA figure reflects manual data collection specifically, a narrower activity than this tool's complete five-article assessment)
 - **15-scenario systematic sensitivity analysis** confirming proportionate, legally consistent behaviour across the full risk spectrum
 - **Six independent domain experts** completed structured review (Cohen's weighted Kappa 0.317 overall, rising to 0.442 excluding one reviewer whose independently corroborated audit found the most defects)
 - **An unsolicited independent code audit** from a Product Lead in Credit Decisioning at a major European bank identified further real defects, all verified and corrected
@@ -46,10 +48,10 @@ Full methodology and results are documented in the dissertation and the accompan
 Three-tier cloud architecture:
 
 - **Presentation layer** - React 18 and TypeScript, deployed on Vercel
-- **Application layer** - Python 3.11 FastAPI service, deployed on Hugging Face Spaces (Docker), five parallel compliance API endpoints
+- **Application layer** - Python 3.11 FastAPI service, deployed on Hugging Face Spaces (Docker), five compliance API endpoints
 - **Knowledge layer** - Neo4j Aura graph database, 34 nodes across five types (legal articles, EU Charter rights, MITRE ATLAS threats, mitigating controls, ISO 31000 risk factors), connected by five typed relationships enabling genuine multi-hop legal reasoning, not static rule lookup
 
-The knowledge graph carries formal ontology annotations from the Data Privacy Vocabulary (DPV) v2.3 and the AI Risk Ontology (AIRO).
+The knowledge graph carries formal ontology annotations from the Data Privacy Vocabulary (DPV) v2 and the AI Risk Ontology (AIRO).
 
 ## Repository Structure
 
