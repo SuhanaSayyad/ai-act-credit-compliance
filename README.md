@@ -83,7 +83,7 @@ The frontend expects the backend API to be reachable at the URL configured in th
 
 ## Independent Audit
 
-An unsolicited independent code-level audit of the project's source code (frontend and backend) was conducted by Mark Van Asten, Product Lead in Credit Decisioning at ING, published at his own GitHub with permission to cite by name. Three substantive findings from that audit, along with five further findings from structured expert review, were verified against the source code and corrected; details are in the changelog and the dissertation's Evaluation chapter.
+An unsolicited independent code-level audit of the project's source code (frontend and backend) was conducted by a Product Lead in Credit Decisioning at ING, published at his own GitHub. Three substantive findings from that audit, along with five further findings from structured expert review, were verified against the source code and corrected; details are in the changelog and the dissertation's Evaluation chapter.
 
 ## Academic Context
 
