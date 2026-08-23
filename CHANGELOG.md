@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2026-08-22] - Final Pre-Submission Documentation Audit
+
+### Fixed
+- Corrected a mischaracterisation, present in the conference paper and README, of the XAI fidelity comparison as being benchmarked "against Kozodoi et al. (2022)." The comparison is in fact assessed against a self-defined reference feature-importance ranking, constructed from patterns established in the credit-scoring feature-importance literature rather than reproduced from Kozodoi et al.'s published work. Kozodoi et al. (2022) remains correctly cited elsewhere for its fairness-profit trade-off finding, which is unrelated to the XAI benchmark.
+- Removed an unsupported precise "196,000 times" speedup multiplier from the README and conference paper. The EBA manual baseline documents data collection specifically, a narrower activity than this tool's complete five-article assessment, so no precise speedup factor is claimed in the final thesis, paper, or documentation — only the qualitative scale of the gap (seconds versus up to a week) is reported.
+- Corrected README architecture description from "five parallel compliance API endpoints" to "five compliance API endpoints." Measured response-time data (mean per-call time × five ≈ mean full-assessment time) is consistent with sequential execution across the five compliance endpoints, not parallel execution.
+- Corrected DPV ontology version reference from "v2.3" to "v2" across documentation, matching the actual cited publication (Pandit et al., "Data Privacy Vocabulary (DPV) – Version 2.0," ISWC 2024).
+
+### Flagged for verification (not yet resolved)
+- An unresolved internal discrepancy was identified between different parts of the project's own documentation regarding Random Forest's explainability method. The Week 6 workbook entry and the "Challenges Encountered" reflection both describe switching Random Forest from SHAP TreeExplainer to Gini-based feature importance due to memory constraints on the Hugging Face free tier. The workbook's later "Technical Milestones Completed" summary, however, states Random Forest uses SHAP TreeExplainer alongside XGBoost, which is also what the thesis and current conference paper state. This must be verified directly against the live deployed backend code before final submission, and all affected documents (thesis Table 7/§4.4/§5.3.2, conference paper Table III/§IV.C, this changelog, and the workbook) corrected to match whichever is actually true of the current deployment.
+
+---
+
 ## [2026-08-03] - Kappa Calculation and Final Documentation
 
 ### Added
