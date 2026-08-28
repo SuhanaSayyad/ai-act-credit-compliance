@@ -6,7 +6,7 @@ Built as part of an MSc dissertation in Software Design with Cybersecurity at th
 
 **Live tool:** https://ai-act-credit-compliance.vercel.app
 
-**Live Demo:** (https://youtu.be/o3SNR8DPZ38)
+**Live Demo on Youtube:** https://youtu.be/o3SNR8DPZ38
 
 **Backend API:** https://suhanasayyad-ai-act-compliance-backend.hf.space
 
